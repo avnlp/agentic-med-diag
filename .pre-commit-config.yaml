@@ -1,0 +1,78 @@
+exclude: '^(?:_notes/|test_scripts/|thoughts/|am_diag/llm/baml_src/|am_diag/llm/baml_client/|pyproject\.toml$)'
+fail_fast: true
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-ast # checks Python syntax
+      - id: check-json # checks JSON syntax
+      - id: check-merge-conflict # checks for no merge conflict strings
+      - id: check-shebang-scripts-are-executable # checks all shell scripts have executable permissions
+      - id: check-toml # checks TOML syntax
+      - id: check-yaml # checks YAML syntax
+      - id: end-of-file-fixer # checks there is a newline at the end of the file
+      - id: mixed-line-ending # normalizes line endings
+      - id: trailing-whitespace # trims trailing whitespace
+        args: [--markdown-linebreak-ext=md]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.14
+    hooks:
+      - id: ruff-check
+        args: [--fix, --unsafe-fixes, --exit-non-zero-on-fix]
+        types_or: [python, jupyter]
+      - id: ruff-format
+        types_or: [python, jupyter]
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: "1.9.3"
+    hooks:
+      - id: bandit
+        args:
+          [
+            "-c",
+            "pyproject.toml",
+            "-r",
+            "--severity-level",
+            "high",
+            "--confidence-level",
+            "high",
+            "am_diag/",
+          ]
+        additional_dependencies: ["bandit[toml]"]
+
+  - repo: local
+    hooks:
+      - id: ty
+        name: ty
+        entry: uv run ty check am_diag/ tests
+        language: system
+        types: [python]
+        exclude: "^_notes/"
+        pass_filenames: false
+      - id: pytest
+        name: pytest
+        entry: uv run pytest tests -m "not integration"
+        language: system
+        types: [python]
+        exclude: "^_notes/"
+        pass_filenames: false
+
+  - repo: https://github.com/crate-ci/typos
+    rev: v1.42.3
+    hooks:
+      - id: typos
+
+ci:
+  autofix_prs: true
+  autofix_commit_msg: "ci: Auto fixes from pre-commit"
+  autofix_prs_limit: 5
+  autoupdate_schedule: monthly
+  autoupdate_commit_msg: "ci: Pre-commit autoupdate"
+  skip: [ty, pytest, uv-lock]

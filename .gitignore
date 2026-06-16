@@ -98,7 +98,7 @@ ipython_config.py
 #   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
 #   This is especially recommended for binary packages to ensure reproducibility, and is more
 #   commonly ignored for libraries.
-#uv.lock
+uv.lock
 
 # poetry
 #   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
@@ -182,14 +182,29 @@ cython_debug/
 .abstra/
 
 # Visual Studio Code
-#  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore 
+#  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore
 #  that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
-#  and can be added to the global gitignore or merged into this file. However, if you prefer, 
+#  and can be added to the global gitignore or merged into this file. However, if you prefer,
 #  you could uncomment the following to ignore the entire vscode folder
 # .vscode/
 
 # Ruff stuff:
 .ruff_cache/
+
+# am_diag runtime directories (created by the package on first run)
+.data_storage/
+.am_diag_system/
+.am_diag_cache/
+
+# Pipeline output artifacts
+outputs/**
+!outputs/.gitkeep
+
+# Neo4j credential files
+Neo4j-*.txt
+
+# AMG RAG benchmark outputs
+evaluation/amg_rag/results/
 
 # PyPI configuration file
 .pypirc
