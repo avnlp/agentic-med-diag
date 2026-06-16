@@ -13,7 +13,7 @@
 
 ### Notes for the reviewer
 
-<!-- E.g. point out section where the reviewer  -->
+<!-- E.g. point out a section where the reviewer should focus. -->
 
 ### Checklist
 
