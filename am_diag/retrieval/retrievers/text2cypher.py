@@ -98,7 +98,7 @@ class Text2CypherRetriever:
         rows = await self._graph.execute_query(cypher_result)
         return [
             SearchResult(
-                item=row,  # type: ignore
+                item=row,
                 score=1.0 - (i * 0.01),
                 source="cypher",
                 matched_on="text2cypher",

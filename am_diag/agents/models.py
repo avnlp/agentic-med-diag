@@ -30,7 +30,7 @@ def build_chat_model(
     return ChatOpenAI(
         model=model_name,
         base_url=s.base_url,
-        api_key=s.api_key,  # type: ignore
+        api_key=s.api_key,
         temperature=s.temperature,
         max_retries=5,
     )
