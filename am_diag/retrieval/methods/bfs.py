@@ -55,7 +55,7 @@ async def bfs_expand(
     for row in rows:
         results.append(
             SearchResult(
-                item={"id": row["id"], "name": row["name"], "labels": row["labels"]},  # type: ignore
+                item={"id": row["id"], "name": row["name"], "labels": row["labels"]},
                 score=1.0 / (1 + row["hop"]),
                 source="bfs",
                 matched_on=f"hop_{row['hop']}",
