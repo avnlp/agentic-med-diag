@@ -50,7 +50,7 @@ def hydrate_search_results(
     for hit in hits:
         results.append(
             SearchResult(
-                item=hit.payload,  # type: ignore - will be properly hydrated by retrievers
+                item=hit.payload,
                 score=hit.score,
                 source=source,
                 matched_on=matched_on,
