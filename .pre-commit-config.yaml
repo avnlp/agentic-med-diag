@@ -22,7 +22,7 @@ repos:
       - id: gitleaks
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.14
+    rev: v0.15.20
     hooks:
       - id: ruff-check
         args: [--fix, --unsafe-fixes, --exit-non-zero-on-fix]
@@ -31,7 +31,7 @@ repos:
         types_or: [python, jupyter]
 
   - repo: https://github.com/PyCQA/bandit
-    rev: "1.9.3"
+    rev: "1.9.4"
     hooks:
       - id: bandit
         args:
@@ -65,7 +65,7 @@ repos:
         pass_filenames: false
 
   - repo: https://github.com/crate-ci/typos
-    rev: v1.42.3
+    rev: v1.48.0
     hooks:
       - id: typos
 
