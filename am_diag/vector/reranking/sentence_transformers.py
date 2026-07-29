@@ -141,7 +141,10 @@ class SentenceTransformersReranker(Reranker):
 
         pairs = [(effective_query, doc) for doc in documents]
 
-        raw_scores = model.predict(
+        # `predict` annotates its parameter as the invariant `list[PairInput]`,
+        # so no `list[tuple[str, str]]` is assignable to it (upstream should use
+        # `Sequence`). Valid at runtime.
+        raw_scores = model.predict(  # ty: ignore[no-matching-overload]
             pairs,
             batch_size=self._batch_size,
             show_progress_bar=False,

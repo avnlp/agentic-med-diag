@@ -84,6 +84,11 @@ module-root = ""
 default-groups = ["dev"]
 
 
+[tool.ty.rules]
+# `ty: ignore` comments target diagnostics that only some ty versions emit;
+# don't fail the build on the versions that don't.
+unused-ignore-comment = "ignore"
+
 [tool.ty.environment]
 # The project root (".") must come first so the real `am_diag` package resolves
 # ahead of the `tests/am_diag/` test directory, which would otherwise shadow it
@@ -156,6 +161,7 @@ ignore = [
   "PLR2004", # Replace magic number with named constant
   "COM812",  # Trailing comma missing
   "PLR0913", # Too many arguments — template-method ABCs require matching signatures
+  "PLR0917", # Too many positional arguments — same signatures as PLR0913
 ]
 
 [tool.ruff.lint.per-file-ignores]
