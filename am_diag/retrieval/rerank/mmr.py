@@ -49,7 +49,7 @@ def maximal_marginal_relevance(
 
     # Relevance = cosine similarity to query (use existing scores as proxy)
     relevance = np.array([r.score for r in results], dtype=np.float64)
-    relevance = relevance / (relevance.max() + 1e-10)
+    relevance = relevance / (np.max(relevance) + 1e-10)
 
     # Similarity matrix between items
     sim_matrix = vecs @ vecs.T

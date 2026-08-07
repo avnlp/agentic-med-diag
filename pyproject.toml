@@ -73,8 +73,8 @@ dev = [
   "pytest-mock>=3.15.1",
   "pytest-xdist>=3.8.0",
   "pytest-socket>=0.7.0",
-  "ruff>=0.15.20",
-  "typos>=1.48.0",
+  "ruff>=0.16.1",
+  "typos>=1.49.0",
 ]
 
 [tool.uv.build-backend]
