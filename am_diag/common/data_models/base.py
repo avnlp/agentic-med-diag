@@ -198,10 +198,8 @@ class DataPoint(BaseModel):
 
         Returns `None` if no index fields are defined or the field is missing.
         """
-        if (
-            data_point.metadata
-            and len(data_point.metadata["index_fields"]) > 0
-            and hasattr(data_point, data_point.metadata["index_fields"][0])
+        if len(data_point.metadata["index_fields"]) > 0 and hasattr(
+            data_point, data_point.metadata["index_fields"][0]
         ):
             attribute = getattr(data_point, data_point.metadata["index_fields"][0])
             if isinstance(attribute, str):
@@ -212,7 +210,7 @@ class DataPoint(BaseModel):
     @classmethod
     def get_embeddable_properties(cls, data_point: DataPoint) -> list[Any | None]:
         """Return values of all embeddable fields for the given data point."""
-        if data_point.metadata and len(data_point.metadata["index_fields"]) > 0:
+        if len(data_point.metadata["index_fields"]) > 0:
             return [
                 getattr(data_point, field, None)
                 for field in data_point.metadata["index_fields"]
