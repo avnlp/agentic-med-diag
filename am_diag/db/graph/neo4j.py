@@ -8,7 +8,7 @@ as entity type labels). No Cypher string literals appear in this file.
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any, cast
 
@@ -172,7 +172,7 @@ class Neo4jClient(GraphStore):
         return True
 
     @asynccontextmanager
-    async def transaction(self) -> AsyncIterator[Neo4jTransaction]:
+    async def transaction(self) -> AsyncGenerator[Neo4jTransaction, None]:
         """Context manager for explicit, atomic transactions.
 
         Opens a driver session, begins a transaction, and commits on normal

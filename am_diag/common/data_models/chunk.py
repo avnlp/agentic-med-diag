@@ -9,6 +9,7 @@ from pydantic import Field
 
 from am_diag.common.data_models.annotations import Embeddable
 from am_diag.common.data_models.base import DataPoint
+from am_diag.common.data_models.metadata import MetaData
 
 
 class Chunk(DataPoint):
@@ -46,7 +47,7 @@ class Chunk(DataPoint):
     title: str | None = None
 
     # Identity: same (document_id, chunk_index) → same UUID5
-    metadata: dict[str, Any] = {
+    metadata: MetaData = {
         "index_fields": ["text"],
         "identity_fields": ["document_id", "chunk_index"],
     }
