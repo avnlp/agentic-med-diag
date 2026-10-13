@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from am_diag.common.data_models.annotations import Dedup
 from am_diag.common.data_models.base import DataPoint
+from am_diag.common.data_models.metadata import MetaData
 
 
 class EntityType(DataPoint):
@@ -20,7 +21,10 @@ class EntityType(DataPoint):
     gliner_label: str
     description: str
     key_property: str = "name"
-    metadata: dict = {"index_fields": ["gliner_label"], "identity_fields": ["label"]}
+    metadata: MetaData = {
+        "index_fields": ["gliner_label"],
+        "identity_fields": ["label"],
+    }
 
 
 class RelationType(DataPoint):
@@ -34,7 +38,7 @@ class RelationType(DataPoint):
     head_labels: list[str] = Field(default_factory=list)
     tail_labels: list[str] = Field(default_factory=list)
     properties: list[str] = Field(default_factory=list)
-    metadata: dict = {"index_fields": ["glirel_label"], "identity_fields": ["type"]}
+    metadata: MetaData = {"index_fields": ["glirel_label"], "identity_fields": ["type"]}
 
 
 class GraphSchema(BaseModel):
