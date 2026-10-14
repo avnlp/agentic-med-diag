@@ -12,7 +12,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any, cast
 
-from neo4j import AsyncGraphDatabase
+from neo4j import AsyncGraphDatabase, RoutingControl
 from typing_extensions import LiteralString
 
 from am_diag.common.cypher._identifiers import validate_label
@@ -73,6 +73,18 @@ class Neo4jTransaction:
         return await result.data()
 
 
+MAX_NEIGHBOR_DEPTH = 3
+_NEIGHBOR_LIMIT = 1000
+_RESERVED_PROPERTY_KEYS = frozenset({"id", "label", "labels"})
+
+
+def _reject_reserved_keys(props: dict[str, Any]) -> None:
+    """Raise ValueError if a patch touches structural properties."""
+    reserved = _RESERVED_PROPERTY_KEYS & props.keys()
+    if reserved:
+        raise ValueError(f"Cannot update reserved properties: {sorted(reserved)}")
+
+
 class Neo4jClient(GraphStore):
     """Async Neo4j client wrapping the official ``neo4j`` driver.
 
@@ -100,6 +112,8 @@ class Neo4jClient(GraphStore):
         self,
         query: str,
         params: dict[str, Any] | None = None,
+        *,
+        read_only: bool = False,
     ) -> list[dict[str, Any]]:
         """Run a Cypher query and return records as plain dicts.
 
@@ -109,6 +123,8 @@ class Neo4jClient(GraphStore):
         Args:
             query: Cypher query string with ``$name`` placeholders.
             params: Optional parameter bindings for ``$name`` placeholders.
+            read_only: Run the query in a read transaction so the server
+                rejects any write.
 
         Returns:
             Result records as ``list[dict[str, Any]]``. Empty list when the
@@ -121,6 +137,7 @@ class Neo4jClient(GraphStore):
             cast(LiteralString, query),
             parameters_=params,
             database_=self._database,
+            routing_=RoutingControl.READ if read_only else RoutingControl.WRITE,
         )
         return [r.data() for r in result.records]
 
@@ -130,13 +147,14 @@ class Neo4jClient(GraphStore):
         records: list[dict[str, Any]],
         batch_size: int = 500,
     ) -> None:
-        """Execute ``query`` for each chunk of ``records``.
+        """Execute ``query`` for each ``batch_size`` slice of ``records``.
 
-        Each slice is sent in an explicit transaction so that a failure in one
-        batch does not silently corrupt others.
+        Each slice runs as one auto-commit call, atomic on its own. Batches are
+        independent; re-run safety comes from the query's idempotent merge, not
+        cross-batch atomicity.
 
         Args:
-            query: Cypher with an unwind clause and ``$records`` parameter.
+            query: Cypher with an unwind clause and a ``$records`` parameter.
             records: Row data to bind to ``$records``.
             batch_size: Maximum records per driver call.
         """
@@ -144,8 +162,7 @@ class Neo4jClient(GraphStore):
             return
         for i in range(0, len(records), batch_size):
             batch = records[i : i + batch_size]
-            async with self.transaction():
-                await self.execute_query(query, {"records": batch})
+            await self.execute_query(query, {"records": batch})
 
     async def close(self) -> None:
         """Close the underlying driver and release connections."""
@@ -388,6 +405,138 @@ class Neo4jClient(GraphStore):
         await self.link_in_community(kg.communities)
         await self.link_parent_community(kg.communities)
         await self.link_has_report(kg.reports)
+
+    async def get_entity(self, entity_id: str) -> dict[str, Any] | None:
+        """Return one entity row ``{id, labels, props}`` or ``None`` if absent."""
+        rows = await self.execute_query(
+            load("admin/get_entity"), {"id": entity_id}, read_only=True
+        )
+        return rows[0] if rows else None
+
+    async def list_entities(
+        self,
+        *,
+        cursor: str | None = None,
+        limit: int = 100,
+        label: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return a keyset page of entity rows ordered by ascending id."""
+        return await self.execute_query(
+            load("admin/list_entities"),
+            {"cursor": cursor, "limit": limit, "label": label},
+            read_only=True,
+        )
+
+    async def entity_neighbors(
+        self, entity_id: str, depth: int = 1, *, limit: int = _NEIGHBOR_LIMIT
+    ) -> list[dict[str, Any]]:
+        """Return entity rows within ``depth`` RELATES_TO hops of ``entity_id``.
+
+        ``depth`` is clamped to ``1..MAX_NEIGHBOR_DEPTH`` and at most ``limit``
+        rows are returned.
+        """
+        bounded_depth = max(1, min(int(depth), MAX_NEIGHBOR_DEPTH))
+        # Variable-length bounds cannot be Cypher parameters, so the clamped
+        # integer is substituted into the template.
+        query = load("admin/entity_neighbors").replace("${depth}", str(bounded_depth))
+        return await self.execute_query(
+            query, {"id": entity_id, "limit": limit}, read_only=True
+        )
+
+    async def entity_relations(self, entity_id: str) -> list[dict[str, Any]]:
+        """Return relation rows incident to ``entity_id`` (either direction)."""
+        return await self.execute_query(
+            load("admin/entity_relations"), {"id": entity_id}, read_only=True
+        )
+
+    async def entity_chunks(self, entity_id: str) -> list[dict[str, Any]]:
+        """Return chunk rows that mention ``entity_id`` via HAS_ENTITY."""
+        return await self.execute_query(
+            load("admin/entity_chunks"), {"id": entity_id}, read_only=True
+        )
+
+    async def update_entity(
+        self, entity_id: str, props: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Patch an entity's semantic properties and return the updated row."""
+        _reject_reserved_keys(props)
+        rows = await self.execute_query(
+            load("admin/update_entity"), {"id": entity_id, "props": props}
+        )
+        return rows[0] if rows else None
+
+    async def delete_entity(self, entity_id: str) -> None:
+        """Delete an entity and detach all incident relations (cascade)."""
+        await self.execute_query(load("admin/delete_entity"), {"id": entity_id})
+
+    async def get_relation(self, relation_id: str) -> dict[str, Any] | None:
+        """Return one relation row or ``None`` if absent."""
+        rows = await self.execute_query(
+            load("admin/get_relation"), {"id": relation_id}, read_only=True
+        )
+        return rows[0] if rows else None
+
+    async def list_relations(
+        self,
+        *,
+        cursor: str | None = None,
+        limit: int = 100,
+        relation_type: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return a keyset page of relation rows ordered by ascending id."""
+        return await self.execute_query(
+            load("admin/list_relations"),
+            {"cursor": cursor, "limit": limit, "type": relation_type},
+            read_only=True,
+        )
+
+    async def update_relation(
+        self, relation_id: str, props: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Patch a relation's semantic properties and return the updated row."""
+        _reject_reserved_keys(props)
+        rows = await self.execute_query(
+            load("admin/update_relation"), {"id": relation_id, "props": props}
+        )
+        return rows[0] if rows else None
+
+    async def delete_relation(self, relation_id: str) -> None:
+        """Delete a single relation edge (leaf; endpoints are untouched)."""
+        await self.execute_query(load("admin/delete_relation"), {"id": relation_id})
+
+    async def get_chunk(self, chunk_id: str) -> dict[str, Any] | None:
+        """Return one chunk row or ``None`` if absent."""
+        rows = await self.execute_query(
+            load("admin/get_chunk"), {"id": chunk_id}, read_only=True
+        )
+        return rows[0] if rows else None
+
+    async def list_chunks(
+        self, *, cursor: str | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        """Return a keyset page of chunk rows ordered by ascending id."""
+        return await self.execute_query(
+            load("admin/list_chunks"),
+            {"cursor": cursor, "limit": limit},
+            read_only=True,
+        )
+
+    async def get_community(self, community_id: str) -> dict[str, Any] | None:
+        """Return one community row or ``None`` if absent."""
+        rows = await self.execute_query(
+            load("admin/get_community"), {"id": community_id}, read_only=True
+        )
+        return rows[0] if rows else None
+
+    async def list_communities(
+        self, *, cursor: str | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        """Return a keyset page of community rows ordered by ascending id."""
+        return await self.execute_query(
+            load("admin/list_communities"),
+            {"cursor": cursor, "limit": limit},
+            read_only=True,
+        )
 
 
 def create_neo4j_client(settings: Neo4jSettings | None = None) -> Neo4jClient:

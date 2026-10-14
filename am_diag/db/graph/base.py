@@ -38,12 +38,16 @@ class GraphStore(ABC):
         self,
         query: str,
         params: dict[str, Any] | None = None,
+        *,
+        read_only: bool = False,
     ) -> list[dict[str, Any]]:
         """Execute a Cypher query and return records as plain dicts.
 
         Args:
             query: Cypher string with ``$name`` placeholders.
             params: Optional parameter bindings.
+            read_only: Run the query in a read transaction so the server
+                rejects any write. Use it for queries from untrusted sources.
 
         Returns:
             Result records as ``list[dict[str, Any]]``. Empty list when the
@@ -222,6 +226,108 @@ class GraphStore(ABC):
         Args:
             kg: The assembled KnowledgeGraph to persist.
         """
+
+    @abstractmethod
+    async def get_entity(self, entity_id: str) -> dict[str, Any] | None:
+        """Return one entity row ``{id, labels, props}`` or ``None`` if absent."""
+
+    @abstractmethod
+    async def list_entities(
+        self,
+        *,
+        cursor: str | None = None,
+        limit: int = 100,
+        label: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return a keyset page of entity rows ordered by ascending id.
+
+        Args:
+            cursor: Exclusive lower-bound entity id; ``None`` starts from the
+                beginning.
+            limit: Maximum rows to return.
+            label: Optional secondary-label filter.
+        """
+
+    @abstractmethod
+    async def entity_neighbors(
+        self, entity_id: str, depth: int = 1
+    ) -> list[dict[str, Any]]:
+        """Return entity rows within ``depth`` RELATES_TO hops of ``entity_id``."""
+
+    @abstractmethod
+    async def entity_relations(self, entity_id: str) -> list[dict[str, Any]]:
+        """Return relation rows incident to ``entity_id`` (either direction)."""
+
+    @abstractmethod
+    async def entity_chunks(self, entity_id: str) -> list[dict[str, Any]]:
+        """Return chunk rows that mention ``entity_id`` via HAS_ENTITY."""
+
+    @abstractmethod
+    async def update_entity(
+        self, entity_id: str, props: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Patch an entity's semantic properties and return the updated row.
+
+        Args:
+            entity_id: Target entity id.
+            props: Pre-validated semantic fields only; structural identity keys
+                (``id``, ``label``, endpoints) must never be present.
+        """
+
+    @abstractmethod
+    async def delete_entity(self, entity_id: str) -> None:
+        """Delete an entity and detach all incident relations (cascade)."""
+
+    @abstractmethod
+    async def get_relation(self, relation_id: str) -> dict[str, Any] | None:
+        """Return one relation row or ``None`` if absent."""
+
+    @abstractmethod
+    async def list_relations(
+        self,
+        *,
+        cursor: str | None = None,
+        limit: int = 100,
+        relation_type: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return a keyset page of relation rows ordered by ascending id.
+
+        Args:
+            cursor: Exclusive lower-bound relation id; ``None`` starts at the
+                beginning.
+            limit: Maximum rows to return.
+            relation_type: Optional relation-type filter.
+        """
+
+    @abstractmethod
+    async def update_relation(
+        self, relation_id: str, props: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Patch a relation's semantic properties and return the updated row."""
+
+    @abstractmethod
+    async def delete_relation(self, relation_id: str) -> None:
+        """Delete a single relation edge (leaf; endpoints are untouched)."""
+
+    @abstractmethod
+    async def get_chunk(self, chunk_id: str) -> dict[str, Any] | None:
+        """Return one chunk row or ``None`` if absent."""
+
+    @abstractmethod
+    async def list_chunks(
+        self, *, cursor: str | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        """Return a keyset page of chunk rows ordered by ascending id."""
+
+    @abstractmethod
+    async def get_community(self, community_id: str) -> dict[str, Any] | None:
+        """Return one community row or ``None`` if absent."""
+
+    @abstractmethod
+    async def list_communities(
+        self, *, cursor: str | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        """Return a keyset page of community rows ordered by ascending id."""
 
 
 __all__ = ["GraphStore"]
