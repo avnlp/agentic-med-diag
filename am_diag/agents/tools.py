@@ -9,16 +9,29 @@ from __future__ import annotations
 
 import logging
 from functools import wraps
-from typing import Any, Callable
+from typing import Any, Callable, Protocol
 
 from langchain_core.tools import tool
 
 from am_diag.common.data_models.search import SearchResult
 from am_diag.retrieval import recipes
-from am_diag.retrieval.search import SearchEngine
 
 
 logger = logging.getLogger(__name__)
+
+
+class SearchProvider(Protocol):
+    """Structural type for any object exposing ``search(query, recipe)``.
+
+    Both a per-graph ``SearchEngine`` and a cross-graph ``FederatedSearch``
+    satisfy this protocol, so the retrieval tools work over either unchanged.
+    """
+
+    async def search(
+        self, query: str, recipe: Any = ..., filters: Any = ...
+    ) -> list[SearchResult]:
+        """Return ranked search results for ``query`` under ``recipe``."""
+        ...
 
 
 def tool_retry_decorator(max_retries: int = 3):
@@ -76,16 +89,18 @@ def _serialize_results(results: list[SearchResult]) -> list[dict[str, Any]]:
                 "item": item_dict,
                 "score": r.score,
                 "source": r.source,
+                "source_graph_id": r.source_graph_id,
             }
         )
     return out
 
 
-def make_retrieval_tools(search_engine: SearchEngine) -> list:
-    """Create LangChain ``@tool`` functions wrapping Plan-D ``search()``.
+def make_retrieval_tools(search_engine: SearchProvider) -> list:
+    """Create LangChain ``@tool`` functions wrapping a search provider.
 
     Args:
-        search_engine: Configured ``SearchEngine`` instance.
+        search_engine: Any object implementing the :class:`SearchProvider`
+            protocol (a single ``SearchEngine`` or a federated search adapter).
 
     Returns:
         A list of LangChain-compatible tool functions.
@@ -154,6 +169,3 @@ def make_retrieval_tools(search_engine: SearchEngine) -> list:
         cypher_search,
         global_map_reduce,
     ]
-
-
-__all__ = ["make_retrieval_tools", "tool_retry_decorator"]

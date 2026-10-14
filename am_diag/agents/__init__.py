@@ -15,7 +15,7 @@ Usage::
 from __future__ import annotations
 
 from am_diag.agents.agent import build_clinical_agent
-from am_diag.agents.run import answer_question
+from am_diag.agents.run import answer_question, stream_answer
 from am_diag.agents.settings import AgentSettings
 
 
@@ -23,4 +23,5 @@ __all__ = [
     "AgentSettings",
     "answer_question",
     "build_clinical_agent",
+    "stream_answer",
 ]

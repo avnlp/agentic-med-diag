@@ -20,12 +20,11 @@ from am_diag.agents.prompts import (
     VERIFIER_PROMPT,
 )
 from am_diag.agents.settings import AgentSettings
-from am_diag.agents.tools import make_retrieval_tools
-from am_diag.retrieval.search import SearchEngine
+from am_diag.agents.tools import SearchProvider, make_retrieval_tools
 
 
 def build_researcher_subagent(
-    search_engine: SearchEngine,
+    search_engine: SearchProvider,
     settings: AgentSettings | None = None,
 ) -> dict[str, Any]:
     """Build the Researcher subagent configuration.
@@ -96,10 +95,3 @@ def build_verifier_subagent(
         "model": model if s.verifier_model else None,
         "response_format": SufficientContext,
     }
-
-
-__all__ = [
-    "build_planner_subagent",
-    "build_researcher_subagent",
-    "build_verifier_subagent",
-]

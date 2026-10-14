@@ -317,6 +317,15 @@ answer = await answer_question(
 )
 ```
 
+Stream the agent's progress as typed events (`plan`, `tool_call`, `verifier`, `token`, `final`):
+
+```python
+from am_diag.agents import stream_answer
+
+async for event in stream_answer("What treats sepsis?", search_engine=engine):
+    print(event.type)
+```
+
 ## Project Structure
 
 ```text
