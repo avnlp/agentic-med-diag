@@ -95,11 +95,6 @@ unused-ignore-comment = "ignore"
 root = [".", "tests"]
 
 [[tool.ty.overrides]]
-include = ["_notes/**"]
-[tool.ty.overrides.rules]
-all = "ignore"
-
-[[tool.ty.overrides]]
 include = ["test_scripts/**"]
 [tool.ty.overrides.rules]
 all = "ignore"
@@ -125,7 +120,6 @@ target-version = "py311"
 line-length = 88
 include = ["*.py", "pyproject.toml", "*.ipynb"]
 extend-exclude = [
-  "_notes/",
   "test_scripts/",
   "am_diag/llm/baml_src/",
   "am_diag/llm/baml_client/",
@@ -165,7 +159,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["E402", "F401", "F403", "F811"]
-"tests/**/*.py" = ["D", "N802", "N999"]
+"tests/**/*.py" = ["N802", "N999"]
 
 "tests/unit/graph_construction/conftest.py" = ["E501"]
 "tests/unit/graph_construction/test_aggregation.py" = ["PLR0913"]
@@ -237,9 +231,7 @@ exclude_lines = [
 
 [tool.typos.files]
 extend-exclude = [
-  "_notes/",
   "test_scripts/",
-  "thoughts/",
   "am_diag/llm/baml_src/",
   "am_diag/llm/baml_client/",
 ]

@@ -221,3 +221,9 @@ evaluation/amg_rag/results/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Local state and tool caches
+.am_diag/
+.deepeval/
+qa_results.json
+**/.claude/settings.local.json
