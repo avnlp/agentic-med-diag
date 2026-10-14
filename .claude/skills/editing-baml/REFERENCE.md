@@ -9,10 +9,14 @@ BAML is a domain-specific language for building type-safe LLM prompts as functio
 - Jinja-based prompt templating
 - Multi-language code generation (Python, TypeScript, Go, Ruby)
 
-The workflow is: Define BAML files → Run `baml-cli generate` → Import generated client in your code.
+The workflow is: Define BAML files → Run `make baml-gen` → Import generated client in your code.
 </Overview>
 
 ## Installation
+
+In this repository BAML is already installed and the sources are in
+`am_diag/llm/baml_src/`. Run `make baml-gen` instead of the bare `baml-cli`
+commands in this reference. They are generic examples.
 
 ### Python
 ```bash
@@ -44,9 +48,9 @@ https://marketplace.visualstudio.com/items?itemName=boundary.baml-extension
 
 The extension auto-runs `baml-cli generate` on save.
 
-## CRITICAL: Running `baml-cli generate`
+## CRITICAL: Regenerating the client
 
-**You MUST run `baml-cli generate` every time you modify any `.baml` file.**
+**In this repository, you MUST run `make baml-gen` every time you modify any `.baml` file.**
 
 This command:
 1. Reads all `.baml` files in `baml_src/`
@@ -54,10 +58,13 @@ This command:
 3. Creates Pydantic models (Python) or TypeScript interfaces
 
 ```bash
-# Python
+# This repository
+make baml-gen
+
+# Generic Python project
 baml-cli generate
 
-# TypeScript
+# Generic TypeScript project
 npx baml-cli generate
 ```
 
@@ -94,10 +101,10 @@ generator target {
   output_dir "../"
 
   // Runtime version - should match installed package version (REQUIRED)
-  version "0.76.2"
+  version "0.222.0"
 
   // Default client mode: "sync" or "async"
-  default_client_mode "sync"
+  default_client_mode async
 
   // TypeScript only: "cjs" (CommonJS) or "esm" (ES modules)
   module_format "cjs"
@@ -507,12 +514,11 @@ test TestLocalImage {
 
 ### Python
 ```python
-from baml_client import b
-from baml_client.types import TweetAnalysis
+from am_diag.llm.baml_client import b
+from am_diag.llm.baml_client.types import TweetAnalysis
 
-def main():
-    # Sync call
-    result = b.ClassifyTweets(["Hello!", "Check out this deal!"])
+async def main():
+    result = await b.ClassifyTweets(["Hello!", "Check out this deal!"])
 
     for analysis in result:
         print(f"Topic: {analysis.mainTopic}")
@@ -538,13 +544,14 @@ async function main() {
 
 ```python
 from baml_py import Image
-from baml_client import b
+from am_diag.llm.baml_client import b
 
+# Inside an async function
 # From URL
-result = b.DescribeImage(Image.from_url("https://example.com/photo.jpg"))
+result = await b.DescribeImage(Image.from_url("https://example.com/photo.jpg"))
 
 # From base64
-result = b.DescribeImage(Image.from_base64("image/png", base64_string))
+result = await b.DescribeImage(Image.from_base64("image/png", base64_string))
 ```
 
 ```typescript
@@ -807,11 +814,11 @@ BAML supports structured streaming with automatic partial JSON parsing.
 
 ### Basic Streaming
 ```python
-# Python
+# Python (the client in this repository is async)
 stream = b.stream.MyFunction(input)
-for partial in stream:
+async for partial in stream:
     print(partial)  # Partial object with nullable fields
-final = stream.get_final_response()  # Complete validated object
+final = await stream.get_final_response()  # Complete validated object
 ```
 
 ```typescript
@@ -902,7 +909,7 @@ export default withBaml()(nextConfig);
 generator typescript {
   output_type "typescript/react"  // Enable React hooks generation
   output_dir "../"
-  version "0.76.2"
+  version "0.222.0"
 }
 ```
 
@@ -1082,8 +1089,8 @@ class User {
 
 **Python:**
 ```python
-from baml_client.type_builder import TypeBuilder
-from baml_client import b
+from am_diag.llm.baml_client.type_builder import TypeBuilder
+from am_diag.llm.baml_client import b
 
 tb = TypeBuilder()
 
@@ -1096,7 +1103,7 @@ tb.User.add_property('email', tb.string())
 tb.User.add_property('address', tb.string().optional())
 
 # Pass TypeBuilder when calling function
-result = b.Categorize("The sun is bright", {"tb": tb})
+result = await b.Categorize("The sun is bright", {"tb": tb})
 ```
 
 **TypeScript:**
@@ -1160,7 +1167,7 @@ tb.User.add_property("address", address.type())
 **Python:**
 ```python
 from baml_py import ClientRegistry
-from baml_client import b
+from am_diag.llm.baml_client import b
 import os
 
 cr = ClientRegistry()
@@ -1180,7 +1187,7 @@ cr.add_llm_client(
 cr.set_primary('MyClient')
 
 # Use the registry
-result = b.ExtractResume("...", {"client_registry": cr})
+result = await b.ExtractResume("...", {"client_registry": cr})
 ```
 
 **TypeScript:**
@@ -1215,7 +1222,7 @@ Note: Using the same name as a BAML-defined client overwrites it for that call.
 
 ## Best Practices
 
-1. **Always run `baml-cli generate`** - After ANY change to `.baml` files
+1. **Always run `make baml-gen`** - After ANY change to `.baml` files
 2. **Always use `{{ ctx.output_format }}`** - Never write output schema manually
 3. **Use `{{ _.role("user") }}`** - Mark where user inputs begin
 4. **Use enums for classification** - Not confidence scores or numbers
@@ -1250,7 +1257,7 @@ baml_src/
   tests.baml        # Test cases
 ```
 
-Run `baml generate` after changes to regenerate the client code.
+Run `make baml-gen` after changes to regenerate the client code.
 
 ## Notes on Generated Types
 

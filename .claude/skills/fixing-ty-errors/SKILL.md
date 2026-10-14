@@ -126,15 +126,15 @@ description: Fix ty type-check failures. Use when make lint-typing or uv run ty 
           def __getitem__(self, item: str) -> _V: ...
           # ...
 
-          def to(self, device) -> MyDict[torch.Tensor]:
+          def to(self, device) -> "MyDict[torch.Tensor]":
               # after .to(), values are tensors
-              ...
-              return self  # type: ignore[return-value]
+              return MyDict({key: value.to(device) for key, value in self.items()})
       ```
       The `default=Any` (from `typing_extensions`) means unparameterized usage
       like `MyDict()` stays `MyDict[Any]` — no existing code needs to change.
       Only methods that narrow the value type (like `.to()`) declare a specific
-      return type. This eliminates `cast()` at all call sites.
+      return type, and they build and return a converted instance instead of
+      returning `self`. This eliminates `cast()` at all call sites.
 
    h. **Use `self: "ProtocolType"` for mixins**. When a mixin accesses attributes
       from its host class, define a local Protocol in the nearest appropriate
@@ -142,35 +142,44 @@ description: Fix ty type-check failures. Use when make lint-typing or uv run ty 
       consistently to all methods in the mixin. Import under `TYPE_CHECKING` to
       avoid circular imports.
 
-   i. **Use `TypeGuard` functions for dynamic module attributes** (for example
-      `torch.npu`, `torch.xpu`, `torch.compiler`). Instead of `getattr(torch, "npu")`
-      or `hasattr(torch, "npu") and torch.npu.is_available()`, define a type guard
-      function in the nearest appropriate project typing/helper module:
+   i. **Use a typed accessor for dynamic module attributes** (for example
+      `torch.npu`, `torch.xpu`, `torch.compiler`). Instead of repeating
+      `getattr(torch, "npu")` or `hasattr(torch, "npu") and torch.npu.is_available()`
+      at call sites, define one accessor in the nearest appropriate project
+      typing/helper module. It returns the backend as a small `Protocol` type, or
+      `None` when the backend is missing:
       ```python
-      def has_torch_npu(mod: ModuleType) -> TypeGuard[Any]:
-          return hasattr(mod, "npu") and mod.npu.is_available()
-      ```
-      Then use it as a narrowing check: `if has_torch_npu(torch): torch.npu.device_count()`.
-      After the guard, `ty` treats the module as `Any`, allowing attribute access
-      without `getattr()` or `cast()`.
+      class NpuBackend(Protocol):
+          def is_available(self) -> bool: ...
+          def device_count(self) -> int: ...
 
-      **Key rules for type guards**:
-      - Use `TypeGuard[Any]` (not a Protocol) — this is the simplest form that works
-        with `ty` and avoids losing the original module's known attributes.
-      - The guard function must be called directly in an `if` condition for narrowing
-        to work. `ty` does NOT narrow through `and` conditions or `if not guard: return`.
-      - Import guards with `from .._typing import has_torch_xxx` (not via module
-        attribute `_typing.has_torch_xxx`) — `ty` only resolves `TypeGuard` from
-        direct imports.
+      def get_torch_npu(mod: ModuleType) -> NpuBackend | None:
+          backend = getattr(mod, "npu", None)
+          if backend is None or not backend.is_available():
+              return None
+          return cast(NpuBackend, backend)
+      ```
+      Callers narrow the returned value: `npu = get_torch_npu(torch)`, then
+      `if npu is not None: npu.device_count()`. `ty` checks every attribute used on
+      `npu` against the Protocol.
+
+      **Key rules for accessors**:
+      - Declare only the attributes the project uses on the Protocol.
+      - Do not use `TypeGuard[Any]` for this. Inside the guarded branch it makes the
+        whole module `Any`, so `ty` stops checking even the module's known
+        attributes.
+      - Do the `getattr()` and `cast()` once, inside the accessor, after the check.
+        Call sites stay free of both.
 
    j. **Use `getattr()` / `setattr()` for dynamic model/config attributes**.
       For runtime-injected fields (for example config/model flags), use
       `getattr(obj, "field", default)` for reads and `setattr(obj, "field", value)`
       for writes. Also use `getattr()` for third-party packages missing type stubs
       (for example `getattr(safetensors, "__version__", "unknown")`).
-      Avoid `getattr(torch, "npu")` style — use type guards instead (see above).
+      Avoid `getattr(torch, "npu")` at call sites — use a typed accessor instead
+      (see above).
 
-   k. **Use `cast()` as a last resort before `# type: ignore`**.
+   k. **Use `cast()` as a last resort before `# ty: ignore`**.
       Use when you've structurally validated the type but the checker can't see it:
       pattern-matched AST nodes, known-typed dict values, or validated API responses.
       ```python
@@ -178,24 +187,29 @@ description: Fix ty type-check failures. Use when make lint-typing or uv run ty 
       stmt = cast(cst.Assign, node.body[0])
       annotations = cast(list[Annotation], [])
       ```
-      Do not use `cast()` for module attribute narrowing — use type guards.
+      Do not use `cast()` for module attribute narrowing at call sites — use a
+      typed accessor.
       Do not use `cast()` when `@overload` or generics can solve it at the source.
 
-   l. **Use `# type: ignore` only for third-party stub defects**. This means
+   l. **Use `# ty: ignore[<rule>]` only for third-party stub defects**. This means
       cases where the third-party package's type stubs are wrong or incomplete
       and there is no way to narrow or cast around it. Examples:
       - A kwarg that exists at runtime but is missing from the stubs
       - A method that exists but isn't declared in the stubs
-      Always add the specific error code: `# type: ignore[call-arg]`, not bare
-      `# type: ignore`.
+      Always name the `ty` rule, for example `# ty: ignore[unknown-argument]`, not a
+      bare `# ty: ignore`. Do not write mypy-style codes such as
+      `# type: ignore[call-arg]`. `ty` does not read them, so the diagnostic is
+      not suppressed.
 
 5. **Things to never do**:
    - **Never use `assert` for type narrowing.** Asserts are stripped by `python -O`
      and must not be relied on for correctness. Use `if ...: raise` instead.
-   - **Never use `# type: ignore` as a first resort.** Exhaust all approaches above first.
+   - **Never use `# ty: ignore` as a first resort.** Exhaust all approaches above first.
    - Do not use `getattr(torch, "backend")` to access dynamic device backends
-     (`npu`, `xpu`, `hpu`, `musa`, `mlu`, `neuron`, `compiler`) — use type guards
-   - Do not use `cast()` for module attribute narrowing — use type guards
+     (`npu`, `xpu`, `hpu`, `musa`, `mlu`, `neuron`, `compiler`) — use a typed
+     accessor
+   - Do not use `cast()` for module attribute narrowing at call sites — use a
+     typed accessor
    - Do not use `cast()` when `@overload` or generics can eliminate it at the source
    - Do not add helper methods or abstractions just to satisfy the type checker
      (especially for only 1-2 occurrences)

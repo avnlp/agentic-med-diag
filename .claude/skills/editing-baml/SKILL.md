@@ -11,6 +11,9 @@ description: BAML source and generated client rules. Use when editing .baml file
   bare `baml-cli generate`), and commit the regenerated client.
 - The generator targets `python/pydantic`; generated BAML types are Pydantic
   models.
+- This repository is Python-only and the generated client is async. Import it
+  from `am_diag.llm.baml_client` and await its calls. Ignore the TypeScript,
+  JavaScript, React, and Next.js sections of the reference.
 - For model choice use current generally available models and verify against
   provider docs. Model IDs in [REFERENCE.md](REFERENCE.md) illustrate syntax
   only; do not copy them.

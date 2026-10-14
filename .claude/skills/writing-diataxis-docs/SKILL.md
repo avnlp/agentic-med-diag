@@ -56,7 +56,8 @@ Diátaxis groups documentation by the reader's purpose. Tutorials support learni
   - Assumes necessary competence
 - **What to Avoid**:
   - Don't teach basic concepts
-  - Don't explain why things work
+  - Don't explain why things work beyond a brief reason that helps the reader
+    finish the task; link to an explanation page for deeper context
   - Don't cover every possible variation
   - Don't include detailed technical specifications
   - Don't focus on learning objectives

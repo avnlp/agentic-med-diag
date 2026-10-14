@@ -9,19 +9,18 @@ Use these rules for tests in this repository.
 
 ## Core rules
 
-- Never write unit tests after you write code.
-- Highly prefer E2E or integration tests as the sole testing mechanism. Use them to verify complex features work. At the end of those tests, produce a verifiable and repeatable artifact.
-- If you must test a system in isolation, first write down all the ways it could fail, then write the code.
+- Use the narrowest test that proves the behavior. Write an integration test for behavior that spans components or depends on real services, and a unit test for isolated logic with real branches.
+- Before writing the code, write down the ways it could fail, and cover those cases in the test.
 - A test that breaks under a behavior-preserving refactor is asserting implementation, not behavior. Do not add it.
 - Never delete or weaken a failing test to make the suite pass. Fix the code, or ask.
-- Do not add tests that restate the code, assert mock call shapes, grep source or docs text, compute the expected value with the code under test, or only keep a test-only export or seam alive.
+- Do not add tests that merely restate the code, assert incidental mock call details, grep source or docs text as a substitute for checking behavior, compute the expected value with the code under test, or only keep a test-only export or seam alive. Explicit architecture guard tests and boundary-contract assertions are allowed.
 
 ## Organization
 
 - Use `pytest` and `pytest-asyncio` for tests, including async tests.
 - Tests mirror the `am_diag/` package structure under `tests/am_diag/`.
   Integration tests sit beside the unit tests in `test_<name>_integration.py`.
-- Use one `Test<Feature>` class per `test_<feature>.py` file.
+- Use one `Test<Feature>` class per `test_<feature>.py` file when practical.
 - `pytest-asyncio` runs in auto mode. Do not add `@pytest.mark.asyncio` to async
   tests.
 - Pytest runs with `-m 'not integration'` by default, so integration tests run
@@ -34,15 +33,17 @@ Use these rules for tests in this repository.
   details. Avoid accessing private members in tests unless there is no public
   seam and adding one would be worse for the design.
 - Follow nearby test patterns before introducing new fixtures or helpers.
-- For bug fixes, extend the E2E or integration test that covers the behavior so
-  it fails without the fix. Add a unit test only when the core rules allow it.
+- For bug fixes, extend the existing mapped test file when one already covers
+  the affected module, with a test that fails without the fix. Create a new
+  test file only when no mapped test exists or a new feature/component needs
+  one.
 - One focused test that fails without the fix is better than many shallow tests
   that do not prove behavior.
 
 ## Isolation
 
-- Unit tests are the exception. When you write one, it must mock external
-  dependencies such as Neo4j, Qdrant, Weaviate, Hugging Face, and LLM APIs.
+- Unit tests must mock external dependencies such as Neo4j, Qdrant, Weaviate,
+  Hugging Face, and LLM APIs.
 - Unit tests must not enable sockets. If a unit test hits `SocketBlockedError`,
   fix the mock rather than enabling network access.
 - `pytest-socket` disables network by default with

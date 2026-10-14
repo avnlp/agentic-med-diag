@@ -129,8 +129,8 @@ Use these local patterns when documenting common am_diag component types.
 class Entity(DataPoint):
     """A resolved medical entity from the knowledge graph.
 
-    Identity is ``(canonical_name, label)``. An entity may accumulate aliases
-    and provenance records across resolution runs.
+    Identity is ``(name, label)``, the Dedup key for UUID5 generation. An entity
+    may accumulate aliases and provenance records across resolution runs.
 
     Attributes:
         name: Surface-form name as extracted from source text.

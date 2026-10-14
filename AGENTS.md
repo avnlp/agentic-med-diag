@@ -77,7 +77,7 @@ Core data flow:
 - Inject dependencies through constructors or function parameters; do not add a dependency-injection framework.
 - Match existing patterns before introducing new abstractions.
 - Prefer small, surgical edits. Do not refactor adjacent code opportunistically.
-- Verify changed behavior with an end-to-end or integration test, following the Testing requirements below.
+- Verify changed behavior with the narrowest test that proves it: an integration test for cross-component behavior, a unit test for isolated logic. Follow the Testing requirements below.
 - Do not manually edit generated BAML client files under `am_diag/llm/baml_client/`.
 - Do not commit secrets, `.env`, API keys, tokens, or credentials.
 - Do not put patient, customer, partner, or private organization names in code, docs, issues, PRs, commit messages, or tests unless they are already public fixture data approved for that use.
@@ -185,7 +185,7 @@ Follow nearby components first.
 - Keep component logic pure and storage-agnostic when possible.
 - Accept `GraphSchema` where schema constraints matter.
 - Follow the relevant base class and neighboring implementation patterns.
-- Cover the behavior with an end-to-end or integration test.
+- Cover the behavior with the narrowest test that proves it.
 
 ### BAML functions
 
@@ -198,12 +198,11 @@ Follow nearby components first.
 
 Use the `writing-tests` skill before adding or changing tests.
 
-- Never write unit tests after you write code.
-- Highly prefer E2E or integration tests as the sole testing mechanism. Use them to verify complex features work. At the end of those tests, produce a verifiable and repeatable artifact.
-- If you must test a system in isolation, first write down all the ways it could fail, then write the code.
+- Use the narrowest test that proves the behavior. Write an integration test for behavior that spans components or depends on real services, and a unit test for isolated logic with real branches.
+- Before writing the code, write down the ways it could fail, and cover those cases in the test.
 - A test that breaks under a behavior-preserving refactor is asserting implementation, not behavior. Do not add it.
 - Never delete or weaken a failing test to make the suite pass. Fix the code, or ask.
-- Do not add tests that restate the code, assert mock call shapes, grep source or docs text, compute the expected value with the code under test, or only keep a test-only export or seam alive.
+- Do not add tests that merely restate the code, assert incidental mock call details, grep source or docs text as a substitute for checking behavior, compute the expected value with the code under test, or only keep a test-only export or seam alive. Explicit architecture guard tests and boundary-contract assertions are allowed.
 - Use `pytest` and `pytest-asyncio`; async tests do not need `@pytest.mark.asyncio`.
 - Tests mirror the `am_diag/` package under `tests/am_diag/`.
 - Use one `Test<ClassName>` class per `test_<class>.py` file when practical.
@@ -212,7 +211,7 @@ Use the `writing-tests` skill before adding or changing tests.
 - Test public interfaces and documented behavior, not private implementation details. Avoid accessing private members in tests unless no public seam exists.
 - For tests over multiple inputs, use `@pytest.mark.parametrize`.
 - Always read and copy the style of similar nearby tests before adding fixtures or helpers.
-- For bug fixes, extend the E2E or integration test that covers the behavior so it fails without the fix. Add a unit test only when the rules above allow it.
+- For bug fixes, extend the existing mapped test file when one already covers the affected module, with a test that fails without the fix. Create a new test file only when no mapped test exists or a new feature/component needs one.
 - One focused test that fails without the fix is better than many shallow tests that do not prove behavior.
 - Do not write assertion-free tests just to increase coverage.
 - Target 80-90% coverage for core/domain logic; do not chase 100% coverage.
@@ -220,7 +219,7 @@ Use the `writing-tests` skill before adding or changing tests.
 
 ### Unit tests
 
-Unit tests are the exception. Write one only for isolated logic with real branches that an E2E or integration test cannot reach, and only under the rules above.
+Unit tests cover isolated logic with real branches. Mock every external service.
 
 - Location: next to the mirrored module under `tests/am_diag/...`, in `test_<name>.py`.
 - No network access. Sockets are disabled by default.
@@ -245,7 +244,7 @@ This project uses `ty`. Use the `fixing-ty-errors` skill when fixing type errors
 - Use narrowing (`isinstance`, `if x is None: raise`, `hasattr`) before casts.
 - Never use `assert` for type narrowing.
 - Use `cast()` only after structural validation when the checker cannot infer the type.
-- Use `# type: ignore[code]` only for genuine third-party stub defects, and never as a first resort.
+- Use `# ty: ignore[<rule>]` only for genuine third-party stub defects, and never as a first resort. Name the `ty` rule. `ty` does not read mypy-style codes such as `# type: ignore[call-arg]`, so they suppress nothing.
 - Do not add helper abstractions solely to satisfy the type checker.
 
 ## Writing style
@@ -325,7 +324,7 @@ Use judgment based on scope, but default to these artifacts.
 
 ### Bug fixes
 
-1. Reproduce the bug in an E2E or integration test that fails without the fix.
+1. Reproduce the bug in a test that fails without the fix.
 2. Implement the smallest correct fix.
 3. Run the focused test.
 4. Run lint/type checks when the touched area or risk justifies them.
@@ -333,7 +332,7 @@ Use judgment based on scope, but default to these artifacts.
 ### New features
 
 1. Follow existing interfaces and component patterns.
-2. Add an E2E or integration test that exercises the feature and leaves a verifiable, repeatable artifact.
+2. Add tests for the happy path, edge cases, and error behavior, using the narrowest test that proves each.
 3. Update docstrings and user-facing docs if behavior is public.
 4. Run focused tests plus the narrowest broader check that proves integration.
 
@@ -368,7 +367,7 @@ Before handing off non-trivial changes, check:
 
 - Correctness: the code does what the request says and handles relevant edge cases such as empty inputs, `None`, and boundary values.
 - Public contract: public APIs, documented behavior, and existing call sites are preserved unless a breaking change was explicitly approved.
-- Tests: changed behavior has an E2E or integration test that fails when the behavior is broken and survives a behavior-preserving refactor.
+- Tests: changed behavior has a test that fails when the behavior is broken and survives a behavior-preserving refactor.
 - Style: new or modified public functions are typed, docstrings are updated when needed, and Ruff formatting/linting expectations are respected.
 - Design: no unnecessary abstractions, private-member access, god objects, monster files, or speculative configurability were introduced.
 - Safety: no secrets, unsafe deserialization, injection risks, resource leaks, or unnecessary hot-path allocations were introduced.
