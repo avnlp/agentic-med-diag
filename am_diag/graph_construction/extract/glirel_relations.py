@@ -12,6 +12,7 @@ from am_diag.common.data_models.enums import ExtractorName
 from am_diag.common.data_models.provenance import Provenance
 from am_diag.common.data_models.relation import Relation
 from am_diag.common.data_models.schema import GraphSchema
+from am_diag.graph_construction._provenance import ensure_provenance
 from am_diag.graph_construction.config import ExtractionPipelineConfig
 from am_diag.graph_construction.extract.base import Extractor
 
@@ -39,8 +40,9 @@ def _entities_for_glirel(
 ) -> list[list]:
     result = []
     for ent in entities:
-        sc = ent.provenance.start_char
-        ec = ent.provenance.end_char
+        ent_prov = ensure_provenance(ent)
+        sc = ent_prov.start_char
+        ec = ent_prov.end_char
         if sc is None or ec is None:
             continue
         start_tok = char_to_token.get(sc)

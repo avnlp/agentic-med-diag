@@ -7,6 +7,7 @@ from typing import Literal
 from am_diag.common.data_models.entity import Entity
 from am_diag.common.data_models.enums import ExtractorName
 from am_diag.common.data_models.relation import Relation
+from am_diag.graph_construction._provenance import ensure_provenance
 from am_diag.graph_construction.config import ExtractionPipelineConfig
 from am_diag.graph_construction.resolve.text import normalize_text
 
@@ -23,20 +24,24 @@ def _relation_key(r: Relation) -> tuple[str, str, str]:
 
 
 def _merge_entity(into: Entity, src: Entity) -> None:
-    for cid in src.provenance.chunk_ids:
-        if cid not in into.provenance.chunk_ids:
-            into.provenance.chunk_ids.append(cid)
-    for s in src.provenance.surface_forms:
-        if s not in into.provenance.surface_forms:
-            into.provenance.surface_forms.append(s)
+    src_prov = ensure_provenance(src)
+    into_prov = ensure_provenance(into)
+    for cid in src_prov.chunk_ids:
+        if cid not in into_prov.chunk_ids:
+            into_prov.chunk_ids.append(cid)
+    for s in src_prov.surface_forms:
+        if s not in into_prov.surface_forms:
+            into_prov.surface_forms.append(s)
     into.score = max(into.score, src.score)
     into.schema_properties.update(src.schema_properties)
 
 
 def _merge_relation(into: Relation, src: Relation) -> None:
-    for cid in src.provenance.chunk_ids:
-        if cid not in into.provenance.chunk_ids:
-            into.provenance.chunk_ids.append(cid)
+    src_prov = ensure_provenance(src)
+    into_prov = ensure_provenance(into)
+    for cid in src_prov.chunk_ids:
+        if cid not in into_prov.chunk_ids:
+            into_prov.chunk_ids.append(cid)
     into.score = max(into.score, src.score)
     into.schema_properties.update(src.schema_properties)
 
@@ -133,7 +138,7 @@ def _gliner_primary(
     gliner_idx = -1
     for i, (entities, _) in enumerate(results):
         if entities and any(
-            e.provenance.extractor == ExtractorName.GLINER for e in entities
+            ensure_provenance(e).extractor == ExtractorName.GLINER for e in entities
         ):
             gliner_idx = i
             break
