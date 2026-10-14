@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from am_diag.common.data_models import Document, Entity, Relation
+from am_diag.graph_construction._provenance import ensure_provenance
 from am_diag.graph_construction.config import ExtractionPipelineConfig
 from am_diag.graph_construction.resolve.text import normalize_text as _normalize
 
@@ -47,28 +48,28 @@ class EntityRelationNormalizer:
             norm_text = _normalize(ent.name)
             if len(norm_text) < min_length:
                 continue
+            ent_prov = ensure_provenance(ent)
             key = (norm_text, ent.label)
             if key in entity_accum:
                 existing = entity_accum[key]
+                existing_prov = ensure_provenance(existing)
                 if (
-                    ent.provenance.extractor
-                    and ent.provenance.extractor not in existing.provenance.sources
+                    ent_prov.extractor
+                    and ent_prov.extractor not in existing_prov.sources
                 ):
-                    existing.provenance.sources.append(ent.provenance.extractor)
-                if ent.name not in existing.provenance.surface_forms:
-                    existing.provenance.surface_forms.append(ent.name)
-                for cid in ent.provenance.chunk_ids:
-                    if cid not in existing.provenance.chunk_ids:
-                        existing.provenance.chunk_ids.append(cid)
+                    existing_prov.sources.append(ent_prov.extractor)
+                if ent.name not in existing_prov.surface_forms:
+                    existing_prov.surface_forms.append(ent.name)
+                for cid in ent_prov.chunk_ids:
+                    if cid not in existing_prov.chunk_ids:
+                        existing_prov.chunk_ids.append(cid)
                 if ent.score > existing.score:
                     existing.score = ent.score
                     existing.name = ent.name
                 existing.schema_properties.update(ent.schema_properties)
             else:
-                ent.provenance.sources = (
-                    [ent.provenance.extractor] if ent.provenance.extractor else []
-                )
-                ent.provenance.surface_forms = [ent.name]
+                ent_prov.sources = [ent_prov.extractor] if ent_prov.extractor else []
+                ent_prov.surface_forms = [ent.name]
                 entity_accum[key] = ent
 
         normalized_entities = list(entity_accum.values())
@@ -78,7 +79,7 @@ class EntityRelationNormalizer:
         for ent in normalized_entities:
             norm_text = _normalize(ent.name)
             norm_to_canonical[norm_text] = ent.name
-            for form in ent.provenance.surface_forms:
+            for form in ensure_provenance(ent).surface_forms:
                 norm_to_canonical.setdefault(_normalize(form), ent.name)
 
         # ── Deduplicate relations ────────────────────────────────────────
@@ -88,24 +89,25 @@ class EntityRelationNormalizer:
             canon_tail = norm_to_canonical.get(_normalize(rel.tail_name))
             if canon_head is None or canon_tail is None:
                 continue
+            rel_prov = ensure_provenance(rel)
             key = (_normalize(canon_head), _normalize(canon_tail), rel.type)
             if key in accum_rels:
                 existing = accum_rels[key]
-                for cid in rel.provenance.chunk_ids:
-                    if cid not in existing.provenance.chunk_ids:
-                        existing.provenance.chunk_ids.append(cid)
+                existing_prov = ensure_provenance(existing)
+                for cid in rel_prov.chunk_ids:
+                    if cid not in existing_prov.chunk_ids:
+                        existing_prov.chunk_ids.append(cid)
                 existing.score = max(existing.score, rel.score)
             else:
                 rel.head_name = canon_head
                 rel.tail_name = canon_tail
-                rel.provenance.chunk_ids = list(rel.provenance.chunk_ids)
+                rel_prov.chunk_ids = list(rel_prov.chunk_ids)
                 accum_rels[key] = rel
 
         normalized_relations: list[Relation] = []
         for rel in accum_rels.values():
-            rel.provenance.sources = (
-                [rel.provenance.extractor] if rel.provenance.extractor else []
-            )
+            rel_prov = ensure_provenance(rel)
+            rel_prov.sources = [rel_prov.extractor] if rel_prov.extractor else []
             normalized_relations.append(rel)
 
         return normalized_entities, normalized_relations

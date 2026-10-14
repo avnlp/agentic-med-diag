@@ -19,6 +19,7 @@ from am_diag.graph_construction.config import (
 )
 from am_diag.graph_construction.extract.base import Extractor
 from am_diag.graph_construction.extract.combine import ExtractionCombiner
+from am_diag.graph_construction.extract.composed import ComposedExtractor
 from am_diag.graph_construction.extract.gliner_entities import GLiNEREntityExtractor
 from am_diag.graph_construction.extract.glirel_relations import GLiRELRelationExtractor
 from am_diag.graph_construction.extract.llm import LLMExtractor
@@ -36,6 +37,7 @@ __all__ = [
     "AliasApplier",
     "CommunityDetectionConfig",
     "CommunitySummarizer",
+    "ComposedExtractor",
     "DeterministicDeduplicator",
     "EntityEdgeResolver",
     "EntityRelationNormalizer",

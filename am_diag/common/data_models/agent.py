@@ -1,7 +1,7 @@
 """Agent data models for the DeepAgents clinical-QA harness.
 
-All agent-facing types live here (Rule 1 from the overhaul plan):
-no agent data model definitions outside ``common/data_models``.
+All agent-facing types live here: no agent data model definitions outside
+``common/data_models``.
 """
 
 from __future__ import annotations

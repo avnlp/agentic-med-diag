@@ -10,8 +10,9 @@ Each public function corresponds to one .cypher template's expected
 
 from __future__ import annotations
 
+import contextlib
 import json
-from typing import Any
+from typing import Any, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -23,6 +24,12 @@ from am_diag.common.data_models.community_report import CommunityReport
 from am_diag.common.data_models.document import Document
 from am_diag.common.data_models.entity import Entity
 from am_diag.common.data_models.relation import Relation
+
+
+# Provenance lists promoted to top-level (queryable, union-preserving) node/edge
+# properties. Kept out of ``schema_properties`` on readback so they do not leak
+# into it — the authoritative copy round-trips via the ``provenance`` JSON blob.
+_PROMOTED_PROVENANCE_LISTS = frozenset({"chunk_ids", "surface_forms"})
 
 
 def _json_dumps(v: Any) -> str:
@@ -43,26 +50,73 @@ def _json_dumps(v: Any) -> str:
 
 
 def _serialize_value(v: Any) -> Any:
-    """Convert a single value to a Neo4j-safe scalar.
+    """Convert a single value to a Neo4j-safe scalar, list, or JSON string.
 
-    Neo4j cannot store Python UUIDs, Pydantic models, or arbitrary dicts
-    natively. This function applies the minimum transformation needed:
-    UUIDs become strings, nested models/dicts/lists become JSON strings,
-    and all other primitives are returned unchanged.
+    UUIDs become strings and Pydantic models / dicts become JSON strings. Lists
+    of primitives are kept as native Neo4j list properties (so they stay
+    queryable, e.g. ``x IN n.aliases``); a list containing nested structures
+    (dicts, lists, or non-primitive scalars) is JSON-encoded instead, since
+    Neo4j only stores homogeneous primitive lists.
 
     Args:
         v: The value to convert.
 
     Returns:
-        A Neo4j-compatible scalar, list, or JSON string.
+        A Neo4j-compatible scalar, primitive list, or JSON string.
     """
     if isinstance(v, UUID):
         return str(v)
     if isinstance(v, BaseModel):
         return v.model_dump_json()
-    if isinstance(v, (dict, list)):
+    if isinstance(v, dict):
+        return _json_dumps(v)
+    if isinstance(v, list):
+        if not v or all(isinstance(x, (str, int, float, bool)) for x in v):
+            return v
         return _json_dumps(v)
     return v
+
+
+def _split_properties(dp: DataPoint, raw: dict[str, Any]) -> dict[str, Any]:
+    """Spread ``schema_properties`` entries into top-level (queryable) keys.
+
+    Scalar and primitive-list properties become individual Neo4j properties so
+    they can be filtered in Cypher; genuinely nested values (dicts, or lists
+    containing dicts) are kept JSON-encoded under a residual ``schema_properties``
+    key. A property whose name collides with a core model field is rejected, so
+    spreading can never shadow a structural field such as ``score`` or ``label``.
+
+    Args:
+        dp: The DataPoint being serialized (its ``model_fields`` define the
+            reserved core names).
+        raw: ``model_dump`` output for ``dp``.
+
+    Returns:
+        ``raw`` with ``schema_properties`` flattened; nested residue, if any,
+        re-attached under ``schema_properties``.
+
+    Raises:
+        ValueError: If a ``schema_properties`` key collides with a core field.
+    """
+    core = set(type(dp).model_fields)
+    props = dict(raw)
+    extra = props.pop("schema_properties", None) or {}
+    nested: dict[str, Any] = {}
+    for key, value in extra.items():
+        if key in core:
+            raise ValueError(
+                f"schema_properties key {key!r} collides with a core "
+                f"{type(dp).__name__} field"
+            )
+        if isinstance(value, dict) or (
+            isinstance(value, list) and any(isinstance(x, dict) for x in value)
+        ):
+            nested[key] = value
+        else:
+            props[key] = value
+    if nested:
+        props["schema_properties"] = nested
+    return props
 
 
 def to_params(dp: DataPoint, *, drop: frozenset[str] = frozenset()) -> dict[str, Any]:
@@ -79,7 +133,68 @@ def to_params(dp: DataPoint, *, drop: frozenset[str] = frozenset()) -> dict[str,
         A flat dict safe to use as Neo4j Cypher parameters.
     """
     raw = dp.model_dump(exclude=set(drop))
-    return {k: _serialize_value(v) for k, v in raw.items()}
+    flat = _split_properties(dp, raw)
+    return {k: _serialize_value(v) for k, v in flat.items()}
+
+
+_T = TypeVar("_T", bound=DataPoint)
+
+
+def reconstruct_schema_properties(
+    cls: type[DataPoint], props: dict[str, Any]
+) -> dict[str, Any]:
+    """Re-collect spread + residual properties into a ``schema_properties`` mapping.
+
+    Inverse of ``_split_properties``: every non-core property plus the residual
+    JSON-encoded nested block recombine into the original ``schema_properties``.
+
+    Args:
+        cls: DataPoint subclass whose ``model_fields`` define the core names.
+        props: Property map read back from the graph node/edge.
+
+    Returns:
+        The reconstructed ``schema_properties`` mapping.
+    """
+    core = set(cls.model_fields)
+    residual_raw = props.get("schema_properties")
+    if isinstance(residual_raw, str):
+        residual = json.loads(residual_raw) if residual_raw else {}
+    else:
+        residual = residual_raw or {}
+    extra = {
+        k: v
+        for k, v in props.items()
+        if k not in core
+        and k != "schema_properties"
+        and k not in _PROMOTED_PROVENANCE_LISTS
+    }
+    return {**extra, **residual}
+
+
+def from_props(cls: type[_T], props: dict[str, Any]) -> _T:
+    """Rebuild a DataPoint from a Neo4j property map (inverse of ``to_params``).
+
+    Re-collects spread + residual properties into ``schema_properties`` and
+    JSON-decodes any core field that was stored as an encoded nested value (e.g.
+    ``provenance``).
+
+    Args:
+        cls: Target DataPoint subclass.
+        props: Property map read back from the graph node/edge.
+
+    Returns:
+        A validated instance of ``cls``.
+    """
+    core = set(cls.model_fields)
+    data = {k: v for k, v in props.items() if k in core}
+    # Core fields holding nested models/dicts were stored as JSON strings by
+    # _serialize_value; decode the ones that look like JSON objects/arrays.
+    for key, value in list(data.items()):
+        if isinstance(value, str) and value[:1] in "{[":
+            with contextlib.suppress(ValueError, TypeError):
+                data[key] = json.loads(value)
+    data["schema_properties"] = reconstruct_schema_properties(cls, props)
+    return cls.model_validate(data)
 
 
 def document_record(doc: Document) -> dict[str, Any]:
@@ -111,45 +226,63 @@ def chunk_record(chunk: Chunk) -> dict[str, Any]:
 
 
 def entity_record(entity: Entity) -> dict[str, Any]:
-    """Build the ``{id, props, type_label}`` record shape for upsert_entities.cypher.
+    """Build the record shape expected by upsert_entities.cypher.
 
     ``type_label`` is extracted separately so the client can group entities by
     label and render the cypher template once per type group — the template
     receives it as a backtick-escaped identifier, not a Cypher parameter.
+    ``chunk_ids`` and ``surface_forms`` are promoted to top-level lists so the
+    template can union them across ingest runs instead of clobbering them (they
+    otherwise live only inside the serialized ``provenance`` blob).
 
     Args:
         entity: The Entity DataPoint to serialize.
 
     Returns:
-        Dict with ``id``, ``type_label`` (str), and ``props`` (flat param dict).
+        Dict with ``id``, ``type_label`` (str), ``props`` (flat param dict), and
+        the promoted ``chunk_ids`` / ``surface_forms`` lists.
     """
     params = to_params(entity)
     entity_id = params.pop("id")
     type_label = params.pop("label")  # rendered into Cypher, not a $parameter
-    return {"id": entity_id, "props": params, "type_label": type_label}
+    prov = entity.provenance
+    return {
+        "id": entity_id,
+        "props": params,
+        "type_label": type_label,
+        "chunk_ids": [str(c) for c in prov.chunk_ids] if prov else [],
+        "surface_forms": list(prov.surface_forms) if prov else [],
+    }
 
 
 def relation_record(rel: Relation) -> dict[str, Any]:
-    """Build the ``{id, head_id, tail_id, props}`` record for upsert_relations.cypher.
+    """Build the record shape expected by upsert_relations.cypher.
 
     ``head_id`` and ``tail_id`` are pulled out at the top level so the Cypher
     template can MATCH the endpoint nodes by id in a single UNWIND pass.
+    ``chunk_ids`` (from provenance) and the top-level ``sources`` list are
+    promoted so the template can union them across ingest runs.
 
     Args:
         rel: The Relation DataPoint to serialize.
 
     Returns:
-        Dict with ``id``, ``head_id``, ``tail_id`` (all str), and ``props``.
+        Dict with ``id``, ``head_id``, ``tail_id`` (all str), ``props``, and the
+        promoted ``chunk_ids`` / ``sources`` lists.
     """
     params = to_params(rel)
     rel_id = params.pop("id")
     head_id = params.pop("head_id")
     tail_id = params.pop("tail_id")
+    sources = params.pop("sources", [])
+    prov = rel.provenance
     return {
         "id": rel_id,
         "head_id": head_id,
         "tail_id": tail_id,
         "props": params,
+        "chunk_ids": [str(c) for c in prov.chunk_ids] if prov else [],
+        "sources": sources,
     }
 
 
@@ -196,7 +329,10 @@ def has_entity_records(entities: list[Entity]) -> list[dict[str, str]]:
     """
     records = []
     for entity in entities:
-        for chunk_id in entity.provenance.chunk_ids:
+        prov = entity.provenance
+        if prov is None:
+            continue
+        for chunk_id in prov.chunk_ids:
             records.append(
                 {
                     "entity_id": str(entity.id),
@@ -265,6 +401,8 @@ def has_report_records(reports: list[CommunityReport]) -> list[dict[str, str]]:
 
 __all__ = [
     "to_params",
+    "from_props",
+    "reconstruct_schema_properties",
     "document_record",
     "chunk_record",
     "entity_record",

@@ -146,12 +146,27 @@ class GdsCommunityDetector(CommunityDetector):
             hierarchical level. Empty if GDS is unavailable or the
             execution fails.
         """
-        from am_diag.common.cypher.loader import load  # noqa: PLC0415
-
         entity_ids = self._collect_entity_ids(relations)
         if not entity_ids:
             logger.warning("GDS: no entity IDs found in relations, skipping")
             return []
+        return await self._run_leiden()
+
+    async def detect_all(self) -> list[Community]:
+        """Detect communities over the entire persisted graph.
+
+        Unlike ``detect``, this needs no in-memory relations: the GDS projection
+        already spans every ``Entity``/``RELATES_TO`` in the database. Used by the
+        graph-global finalization pass after all loaders have been ingested.
+
+        Returns:
+            List of ``Community`` DataPoints (empty if GDS is unavailable).
+        """
+        return await self._run_leiden()
+
+    async def _run_leiden(self) -> list[Community]:
+        """Project the graph, run GDS Leiden, and read back hierarchical communities."""
+        from am_diag.common.cypher.loader import load  # noqa: PLC0415
 
         graph_name = f"gds_leiden_{uuid.uuid4().hex[:8]}"
         cypher = load("community/run_gds_leiden")

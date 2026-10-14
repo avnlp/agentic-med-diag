@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from am_diag.common.data_models import Entity, Relation
+from am_diag.graph_construction._provenance import ensure_provenance
 from am_diag.graph_construction.resolve.text import normalize_text
 
 
@@ -42,15 +43,17 @@ class KGAggregator:
             key = (lower_text, ent.label)
             if key in entity_accum:
                 existing = entity_accum[key]
-                for s in ent.provenance.sources:
-                    if s not in existing.provenance.sources:
-                        existing.provenance.sources.append(s)
-                for sf in ent.provenance.surface_forms:
-                    if sf not in existing.provenance.surface_forms:
-                        existing.provenance.surface_forms.append(sf)
-                for cid in ent.provenance.chunk_ids:
-                    if cid not in existing.provenance.chunk_ids:
-                        existing.provenance.chunk_ids.append(cid)
+                ent_prov = ensure_provenance(ent)
+                existing_prov = ensure_provenance(existing)
+                for s in ent_prov.sources:
+                    if s not in existing_prov.sources:
+                        existing_prov.sources.append(s)
+                for sf in ent_prov.surface_forms:
+                    if sf not in existing_prov.surface_forms:
+                        existing_prov.surface_forms.append(sf)
+                for cid in ent_prov.chunk_ids:
+                    if cid not in existing_prov.chunk_ids:
+                        existing_prov.chunk_ids.append(cid)
                 if ent.score > existing.score:
                     existing.score = ent.score
                     existing.name = ent.name
@@ -65,7 +68,7 @@ class KGAggregator:
         lower_to_canonical: dict[str, str] = {}
         for ent in aggregated_entities:
             lower_to_canonical[ent.name] = ent.name
-            for sf in ent.provenance.surface_forms:
+            for sf in ensure_provenance(ent).surface_forms:
                 lower_to_canonical.setdefault(normalize_text(sf), ent.name)
 
         # ── Aggregate relations ─────────────────────────────────────────────
@@ -81,12 +84,14 @@ class KGAggregator:
             key = (lower_head, lower_tail, rel.type)
             if key in rel_accum:
                 existing = rel_accum[key]
-                for s in rel.provenance.sources:
-                    if s not in existing.provenance.sources:
-                        existing.provenance.sources.append(s)
-                for cid in rel.provenance.chunk_ids:
-                    if cid not in existing.provenance.chunk_ids:
-                        existing.provenance.chunk_ids.append(cid)
+                rel_prov = ensure_provenance(rel)
+                existing_prov = ensure_provenance(existing)
+                for s in rel_prov.sources:
+                    if s not in existing_prov.sources:
+                        existing_prov.sources.append(s)
+                for cid in rel_prov.chunk_ids:
+                    if cid not in existing_prov.chunk_ids:
+                        existing_prov.chunk_ids.append(cid)
                 existing.score = max(existing.score, rel.score)
                 existing.schema_properties.update(rel.schema_properties)
             else:

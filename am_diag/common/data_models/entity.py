@@ -23,7 +23,15 @@ class Entity(DataPoint):
     score: float = 1.0
     schema_properties: dict[str, Any] = Field(default_factory=dict)
 
+    # Canonical external identifier for structured-graph entities, e.g.
+    # "MONDO:0005148". Deliberately not a Dedup field: identity stays
+    # name-keyed for text-extracted entities, while structured loaders pass an
+    # explicit UUID5(curie) id. Kept first-class (not in schema_properties) so it
+    # is a queryable Neo4j property.
+    curie: str | None = None
+
     canonical_name: str | None = None
     aliases: list[str] = Field(default_factory=list)
 
-    provenance: Provenance = Field(default_factory=Provenance)
+    # Optional: text extraction sets this; structured-graph loaders leave it None.
+    provenance: Provenance | None = None

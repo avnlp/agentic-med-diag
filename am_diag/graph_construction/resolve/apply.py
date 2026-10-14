@@ -5,13 +5,14 @@ from __future__ import annotations
 from am_diag.common.data_models.cluster import ResolvedAliasMap
 from am_diag.common.data_models.entity import Entity
 from am_diag.common.data_models.relation import Relation
+from am_diag.graph_construction._provenance import ensure_provenance
 
 
 class AliasApplier:
     """Apply alias maps to entities and relations.
 
-    Sets ``canonical_name`` / ``aliases`` on entities and
-    ``head_id`` / ``tail_id`` on relations.
+    Sets ``canonical_name`` / ``aliases`` on entities and re-points relations at
+    the merged entities.
     """
 
     def apply(
@@ -23,9 +24,9 @@ class AliasApplier:
     ) -> tuple[list[Entity], list[Relation]]:
         """Apply entity alias resolution to entities and relations.
 
-        Mutates DataPoints in place:
-        - Entities get ``canonical_name`` and ``aliases``.
-        - Relations get ``head_id`` / ``tail_id``.
+        - Entities are updated in place with ``canonical_name`` and ``aliases``.
+        - Relations are rebuilt with the merged ``head_id`` / ``tail_id`` so that
+          their deterministic id follows the final endpoints.
 
         Args:
             entities: Aggregated entities.
@@ -49,16 +50,17 @@ class AliasApplier:
             all_props: dict = {}
             all_surface_forms: set[str] = set()
             for e in matched:
-                for cid in e.provenance.chunk_ids:
+                e_prov = ensure_provenance(e)
+                for cid in e_prov.chunk_ids:
                     if cid not in all_chunk_ids:
                         all_chunk_ids.append(cid)
                 all_props.update(e.schema_properties)
-                all_surface_forms.update(e.provenance.surface_forms)
+                all_surface_forms.update(e_prov.surface_forms)
             all_surface_forms.update(m for m in members if m)
 
             best.canonical_name = alias
             best.aliases = sorted(all_surface_forms)
-            best.provenance.chunk_ids = all_chunk_ids
+            ensure_provenance(best).chunk_ids = all_chunk_ids
             best.schema_properties = all_props
             merged_entities.append(best)
 
@@ -67,7 +69,7 @@ class AliasApplier:
             text_to_merged[alias] = best
             for e in matched:
                 text_to_merged[e.name] = best
-                for sf in e.provenance.surface_forms:
+                for sf in ensure_provenance(e).surface_forms:
                     text_to_merged.setdefault(sf, best)
 
         seen_rels: set[tuple[str, str, str]] = set()
@@ -81,9 +83,10 @@ class AliasApplier:
             if key in seen_rels:
                 continue
             seen_rels.add(key)
-            rel.head_id = head_merged.id
-            rel.tail_id = tail_merged.id
-            merged_relations.append(rel)
+            data = rel.model_dump(exclude={"id"})
+            data["head_id"] = head_merged.id
+            data["tail_id"] = tail_merged.id
+            merged_relations.append(Relation(**data))
 
         return merged_entities, merged_relations
 
