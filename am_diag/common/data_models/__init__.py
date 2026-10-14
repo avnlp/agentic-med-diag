@@ -51,6 +51,7 @@ from am_diag.common.data_models.knowledge_graph import KnowledgeGraph
 from am_diag.common.data_models.mcq import ExtractedMCQ, MCQSample
 from am_diag.common.data_models.message import Message
 from am_diag.common.data_models.metadata import MetaData
+from am_diag.common.data_models.project import ProjectRecord
 from am_diag.common.data_models.provenance import Provenance
 from am_diag.common.data_models.qa import OpenEndedSample
 from am_diag.common.data_models.relation import Relation
@@ -107,6 +108,7 @@ __all__ = [
     "MetricResult",
     "OpenEndedSample",
     "PlanEvent",
+    "ProjectRecord",
     "Provenance",
     "QASample",
     "RARMedSample",
