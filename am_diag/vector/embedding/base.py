@@ -19,6 +19,17 @@ class Embedder(ABC):
             vectors = await embedder.embed(["disease X causes symptom Y"])
     """
 
+    @property
+    @abstractmethod
+    def model_id(self) -> str:
+        """Stable identifier of the embedding function.
+
+        Used as the embedding cache key component so two embedders that produce
+        different vectors never share cached results. Must capture every
+        configured input that changes the output vector: the model name and,
+        where it varies, the output dimension.
+        """
+
     @abstractmethod
     async def embed(self, texts: list[str]) -> list[list[float]]:
         """Embed a batch of texts into dense vectors.

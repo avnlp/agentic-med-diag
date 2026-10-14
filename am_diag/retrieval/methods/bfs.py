@@ -7,11 +7,18 @@ edges, degree-capped for medical supernodes.
 from __future__ import annotations
 
 from typing import Any
+from uuid import UUID
 
 from am_diag.common.cypher.loader import load
+from am_diag.common.data_models.entity import Entity
 from am_diag.common.data_models.search import SearchResult
 from am_diag.db.graph.base import GraphStore
 from am_diag.retrieval.filters import SearchFilters
+
+
+def _type_label(labels: list[str]) -> str:
+    """Return the entity type label, skipping the shared ``Entity`` base label."""
+    return next((label for label in labels if label != "Entity"), "Entity")
 
 
 async def bfs_expand(
@@ -55,7 +62,11 @@ async def bfs_expand(
     for row in rows:
         results.append(
             SearchResult(
-                item={"id": row["id"], "name": row["name"], "labels": row["labels"]},
+                item=Entity(
+                    id=UUID(row["id"]),
+                    name=row["name"],
+                    label=_type_label(row["labels"]),
+                ),
                 score=1.0 / (1 + row["hop"]),
                 source="bfs",
                 matched_on=f"hop_{row['hop']}",

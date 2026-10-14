@@ -5,7 +5,7 @@ Uses the vector/reranking module's ``Reranker`` protocol to re-score results.
 
 from __future__ import annotations
 
-from am_diag.common.data_models.search import SearchResult
+from am_diag.common.data_models.search import CypherRow, SearchResult
 from am_diag.vector.reranking.base import Reranker
 
 
@@ -49,6 +49,8 @@ def _item_to_text(item: object) -> str:
     """Extract a text representation from a SearchResult item."""
     if isinstance(item, dict):
         return str(item.get("name", item.get("text", str(item))))
+    if isinstance(item, CypherRow):
+        return str(item)
     if hasattr(item, "name") and item.name:
         return f"{item.__class__.__name__}: {item.name}"
     if hasattr(item, "text") and item.text:

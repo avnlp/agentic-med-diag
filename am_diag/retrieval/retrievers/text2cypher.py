@@ -1,4 +1,4 @@
-"""Text-to-Cypher retriever: BAML ``GenerateCypherQuery`` + EXPLAIN gate + retry.
+"""Text-to-Cypher retriever: BAML ``GenerateCypherQuery`` + EXPLAIN check + retry.
 
 Accepts the new ``:RELATES_TO {type}`` generic-edge schema.
 Schema context is provided by ``GraphSchema.as_text()``.
@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 
 from am_diag.common.data_models.schema import GraphSchema
-from am_diag.common.data_models.search import SearchResult
+from am_diag.common.data_models.search import CypherRow, SearchResult
 from am_diag.db.graph.base import GraphStore
 from am_diag.retrieval.config import RetrievalConfig
 
@@ -18,13 +18,14 @@ logger = logging.getLogger(__name__)
 
 
 class Text2CypherRetriever:
-    """NL-driven Cypher retrieval with EXPLAIN validation and bounded retry.
+    """NL-driven Cypher retrieval with EXPLAIN validation and read-only execution.
 
     Flow:
     1. Serialise ``GraphSchema`` as ``:RELATES_TO {type}`` description.
     2. Call BAML ``GenerateCypherQuery(question, schema, examples)``.
     3. ``EXPLAIN`` validation — if it fails, retry up to ``max_attempts``.
-    4. Execute validated query and return ``SearchResult`` items per row.
+    4. Execute the validated query in a read transaction and return one
+       ``SearchResult`` per row. A query that tries to write returns no results.
 
     Args:
         config: Retrieval settings (``use_text_to_cypher``, ``max_attempts``).
@@ -78,9 +79,9 @@ class Text2CypherRetriever:
 
             cypher = result.cypher.strip()
 
-            # EXPLAIN read-only gate
+            # EXPLAIN checks syntax and the query plan before anything runs.
             try:
-                await self._graph.execute_query(f"EXPLAIN {cypher}")
+                await self._graph.execute_query(f"EXPLAIN {cypher}", read_only=True)
                 cypher_result = cypher
                 break
             except Exception as exc:
@@ -95,10 +96,16 @@ class Text2CypherRetriever:
             )
             return []
 
-        rows = await self._graph.execute_query(cypher_result)
+        # Generated Cypher is untrusted: a read transaction makes the server
+        # reject any write clause the model produced.
+        try:
+            rows = await self._graph.execute_query(cypher_result, read_only=True)
+        except Exception as exc:
+            logger.error("text2cypher: read-only execution failed: %s", exc)
+            return []
         return [
             SearchResult(
-                item=row,
+                item=CypherRow(values=row),
                 score=1.0 - (i * 0.01),
                 source="cypher",
                 matched_on="text2cypher",

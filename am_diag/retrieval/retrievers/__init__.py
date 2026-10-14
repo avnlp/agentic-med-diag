@@ -6,6 +6,7 @@ hydrate raw ``VectorHit`` results into full ``SearchResult`` items.
 
 from __future__ import annotations
 
+from am_diag.retrieval.retrievers.base import HybridRetriever
 from am_diag.retrieval.retrievers.chunk import ChunkRetriever
 from am_diag.retrieval.retrievers.community import CommunityRetriever
 from am_diag.retrieval.retrievers.entity import EntityRetriever
@@ -17,6 +18,7 @@ __all__ = [
     "ChunkRetriever",
     "CommunityRetriever",
     "EntityRetriever",
+    "HybridRetriever",
     "RelationRetriever",
     "Text2CypherRetriever",
 ]

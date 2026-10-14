@@ -74,6 +74,18 @@ class SentenceTransformersEmbedder(Embedder):
         self._model: SentenceTransformer | None = None
         self._lock = asyncio.Lock()
 
+    @property
+    def model_id(self) -> str:
+        """Return the model name, suffixed with the output dimension when set.
+
+        The dimension is part of the identity because a truncated/projected
+        dimension changes the output vector, so cached embeddings must not be
+        shared across dimensions of the same model.
+        """
+        if self._dimensions is not None:
+            return f"{self._model_name}@{self._dimensions}"
+        return self._model_name
+
     async def _get_model(self) -> SentenceTransformer:
         """Lazy-initialise the underlying model with double-checked locking."""
         if self._model is None:
