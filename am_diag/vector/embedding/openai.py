@@ -44,6 +44,11 @@ class OpenAIEmbedder(Embedder):
         self._client: AsyncOpenAI | None = None
         self._lock = asyncio.Lock()
 
+    @property
+    def model_id(self) -> str:
+        """Return the OpenAI embedding model name."""
+        return self._model_name
+
     async def _get_client(self) -> AsyncOpenAI:
         """Lazy-initialise the OpenAI client with double-checked locking."""
         if self._client is None:

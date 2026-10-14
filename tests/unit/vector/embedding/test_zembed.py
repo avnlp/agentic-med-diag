@@ -29,22 +29,46 @@ def _make_zembed_embedder(
 
 
 class TestZembedEmbedderInit:
+    """Tests for ZembedEmbedder initialisation."""
+
     def test_accepts_each_supported_dimension(self):
+        """Verify each supported dimension is accepted."""
         for dim in ZEMBED_SUPPORTED_DIMS:
             embedder = _make_zembed_embedder(dimensions=dim)
             assert embedder._dimensions == dim
 
     def test_rejects_unsupported_dimension(self):
+        """Verify unsupported dimension raises ValueError."""
         with pytest.raises(ValueError, match="zembed dimensions must be one of"):
             ZembedEmbedder(dimensions=999)
 
     def test_rejects_missing_dimension(self):
+        """Verify missing dimension raises ValueError."""
         with pytest.raises(ValueError, match="zembed dimensions must be one of"):
             ZembedEmbedder(dimensions=None)  # type: ignore[arg-type]
 
 
+class TestZembedEmbedderModelId:
+    """Tests for the inherited model_id cache-key identity."""
+
+    def test_model_id_includes_dimension(self):
+        """Zembed dims are learned projections, so the dim is part of identity."""
+        embedder = _make_zembed_embedder(dimensions=640)
+        assert embedder.model_id.startswith(ZEMBED_MODEL_NAME)
+        assert "dim=640" in embedder.model_id
+
+    def test_model_id_distinguishes_dimensions(self):
+        """Two zembed dims of the same model never share an embedding cache key."""
+        small = _make_zembed_embedder(dimensions=320).model_id
+        large = _make_zembed_embedder(dimensions=2560).model_id
+        assert small != large
+
+
 class TestZembedEmbedderEncode:
+    """Tests for _encode method."""
+
     def test_full_dimension_skips_projection_and_quantization(self):
+        """Verify full dimension skips projection and quantization."""
         embedder = _make_zembed_embedder(dimensions=2560)
         full_vectors = np.array([[0.1, 0.2, 0.3]], dtype=np.float32)
         with (
@@ -61,6 +85,7 @@ class TestZembedEmbedderEncode:
         np.testing.assert_array_equal(result, full_vectors)
 
     def test_lower_dimension_applies_projection(self):
+        """Verify lower dimension applies projection."""
         embedder = _make_zembed_embedder(dimensions=1280)
         full_vectors = np.array([[1.0, 0.0]], dtype=np.float32)
         projected = np.array([[0.5, 0.5]], dtype=np.float32)
@@ -84,6 +109,7 @@ class TestZembedEmbedderEncode:
         np.testing.assert_array_equal(result, projected)
 
     def test_temporarily_forces_float32_full_dim_and_restores_attrs(self):
+        """Verify float32 is forced during encode then restored."""
         embedder = _make_zembed_embedder(dimensions=1280, precision="int8")
         captured: dict[str, object] = {}
 
@@ -109,6 +135,7 @@ class TestZembedEmbedderEncode:
         assert embedder._dimensions == 1280
 
     def test_quantizes_after_projection_for_non_float32_precision(self):
+        """Verify quantization is applied after projection for non-float32."""
         embedder = _make_zembed_embedder(dimensions=1280, precision="int8")
         full_vectors = np.array([[1.0, 0.0]], dtype=np.float32)
         projected = np.array([[0.5, 0.5]], dtype=np.float32)
@@ -133,6 +160,7 @@ class TestZembedEmbedderEncode:
         np.testing.assert_array_equal(result, quantized)
 
     def test_float32_precision_skips_quantization(self):
+        """Verify float32 precision skips quantization."""
         embedder = _make_zembed_embedder(dimensions=2560, precision="float32")
         full_vectors = np.array([[0.1, 0.2]], dtype=np.float32)
         with (
@@ -150,7 +178,10 @@ class TestZembedEmbedderEncode:
 
 
 class TestZembedEmbedderProject:
+    """Tests for _project method."""
+
     def test_applies_projection_matrix(self):
+        """Verify projection matrix is applied to embeddings."""
         embedder = _make_zembed_embedder(dimensions=80)
         projection = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]], dtype=np.float32)
         embeddings = np.array([[1.0, 0.0, 0.0]], dtype=np.float32)
@@ -164,6 +195,7 @@ class TestZembedEmbedderProject:
         np.testing.assert_allclose(result, [[1.0, 0.0]])
 
     def test_renormalizes_to_unit_length(self):
+        """Verify projected embeddings are renormalized to unit length."""
         embedder = _make_zembed_embedder(dimensions=80)
         projection = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]], dtype=np.float32)
         embeddings = np.array([[1.0, 1.0, 0.0]], dtype=np.float32)
@@ -177,6 +209,7 @@ class TestZembedEmbedderProject:
         np.testing.assert_allclose(norms, [1.0])
 
     def test_zero_vector_does_not_divide_by_zero(self):
+        """Verify zero vector does not cause division by zero."""
         embedder = _make_zembed_embedder(dimensions=80)
         projection = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]], dtype=np.float32)
         embeddings = np.array([[0.0, 0.0, 0.0]], dtype=np.float32)
@@ -190,7 +223,10 @@ class TestZembedEmbedderProject:
 
 
 class TestZembedEmbedderProjectionMatrix:
+    """Tests for _projection_matrix composition."""
+
     def test_composes_matrices_from_target_up_to_full(self):
+        """Verify matrices are composed from target up to full dimension."""
         embedder = _make_zembed_embedder(dimensions=80)
         mats = {
             "40": np.zeros((10, 40), dtype=np.float32),
@@ -206,6 +242,7 @@ class TestZembedEmbedderProjectionMatrix:
         assert result.shape == (3, 80)
 
     def test_full_dimension_key_requires_no_composition(self):
+        """Verify full dimension key is returned without composition."""
         embedder = _make_zembed_embedder(dimensions=40)
         mats = {"40": np.ones((5, 40), dtype=np.float32)}
         embedder._projection_matrices = mats
@@ -216,7 +253,10 @@ class TestZembedEmbedderProjectionMatrix:
 
 
 class TestZembedEmbedderLoadProjectionMatrices:
+    """Tests for _load_projection_matrices caching."""
+
     def test_downloads_and_caches(self):
+        """Verify projection matrices are downloaded and cached."""
         embedder = _make_zembed_embedder(dimensions=1280)
         fake_mats = {"1280": np.eye(2, dtype=np.float32)}
         with (

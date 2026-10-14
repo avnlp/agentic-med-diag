@@ -39,7 +39,7 @@ from am_diag.common.data_models.rubric import (
     RubricSample,
 )
 from am_diag.common.data_models.schema import EntityType, GraphSchema, RelationType
-from am_diag.common.data_models.search import SearchResult
+from am_diag.common.data_models.search import CypherRow, SearchResult
 from am_diag.common.data_models.vector_record import VectorHit, VectorRecord
 
 
@@ -79,6 +79,7 @@ __all__ = [
     "ResolvedAliasMap",
     "RubricCriterion",
     "RubricSample",
+    "CypherRow",
     "SearchResult",
     "SubQuestion",
     "SufficientContext",

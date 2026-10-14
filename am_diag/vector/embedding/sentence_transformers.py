@@ -74,6 +74,24 @@ class SentenceTransformersEmbedder(Embedder):
         self._model: SentenceTransformer | None = None
         self._lock = asyncio.Lock()
 
+    @property
+    def model_id(self) -> str:
+        """Return the model name suffixed with the settings that change vectors.
+
+        Normalization, precision, input type, dimension and dtype all change the
+        output vector, so cached embeddings must not be shared across them.
+        """
+        parts = [
+            f"normalize={self._normalize}",
+            f"precision={self._precision}",
+            f"input_type={self._input_type}",
+        ]
+        if self._dimensions is not None:
+            parts.append(f"dim={self._dimensions}")
+        if self._torch_dtype is not None:
+            parts.append(f"dtype={self._torch_dtype}")
+        return f"{self._model_name}@{','.join(parts)}"
+
     async def _get_model(self) -> SentenceTransformer:
         """Lazy-initialise the underlying model with double-checked locking."""
         if self._model is None:

@@ -100,32 +100,35 @@ class SearchEngine:
         recipe: SearchConfig,
         filters: SearchFilters | None,
     ) -> list[list[SearchResult]]:
-        """Fan out over recipe methods concurrently."""
-        method_map: dict[str, Any] = {
-            "entity": self._entity.retrieve,
-            "relation": self._relation.retrieve,
-            "chunk": self._chunk.retrieve,
-            "community": self._community.retrieve,
+        """Fan out over recipe methods concurrently.
+
+        The four hybrid retrievers share a uniform signature and all receive the
+        recipe's BFS flags. Text2Cypher is the odd one out — it never expands.
+        """
+        hybrid: dict[str, Any] = {
+            "entity": self._entity,
+            "relation": self._relation,
+            "chunk": self._chunk,
+            "community": self._community,
         }
-        if self._text2cypher:
-            method_map["text2cypher"] = self._text2cypher.retrieve
 
         tasks = []
         for method in recipe.methods:
-            fn = method_map.get(method)
-            if fn is None:
+            if method == "text2cypher":
+                if self._text2cypher:
+                    tasks.append(self._text2cypher.retrieve(query, filters=filters))
                 continue
-            if method == "entity":
-                tasks.append(
-                    fn(
-                        query,
-                        filters=filters,
-                        bfs=recipe.bfs,
-                        bfs_depth=recipe.bfs_depth,
-                    )
-                )
-            else:
-                tasks.append(fn(query, filters=filters))
+            retriever = hybrid.get(method)
+            if retriever is None:
+                continue
+            tasks.append(
+                retriever.retrieve(
+                    query,
+                    filters=filters,
+                    bfs=recipe.bfs,
+                    bfs_depth=recipe.bfs_depth,
+                ),
+            )
 
         return await asyncio.gather(*tasks)
 

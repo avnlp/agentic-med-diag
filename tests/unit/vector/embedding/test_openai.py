@@ -41,11 +41,15 @@ def _make_embedder(
 
 
 class TestOpenAIEmbedderLazyInit:
+    """Tests for open a i embedder lazy init."""
+
     def test_client_is_none_before_first_call(self):
+        """Client is none before first call."""
         embedder = OpenAIEmbedder()
         assert embedder._client is None
 
     async def test_get_client_creates_client(self):
+        """Get client creates client."""
         with patch(_PATCH_TARGET) as mock_cls:
             embedder = OpenAIEmbedder()
             client = await embedder._get_client()
@@ -53,6 +57,7 @@ class TestOpenAIEmbedderLazyInit:
             assert client is mock_cls.return_value
 
     async def test_get_client_reuses_existing(self):
+        """Get client reuses existing."""
         with patch(_PATCH_TARGET) as mock_cls:
             embedder = OpenAIEmbedder()
             c1 = await embedder._get_client()
@@ -62,13 +67,17 @@ class TestOpenAIEmbedderLazyInit:
 
 
 class TestOpenAIEmbedderEmbed:
+    """Tests for open a i embedder embed."""
+
     async def test_returns_empty_list_for_empty_input(self):
+        """Return empty list for empty input."""
         embedder, mock_client = _make_embedder()
         result = await embedder.embed([])
         assert result == []
         mock_client.embeddings.create.assert_not_called()
 
     async def test_calls_embeddings_create_with_model_and_input(self):
+        """Call embeddings create with model and input."""
         embedder, mock_client = _make_embedder(
             [_embedding_response([[0.1, 0.2]])],
             model_name="text-embedding-3-small",
@@ -80,6 +89,7 @@ class TestOpenAIEmbedderEmbed:
         )
 
     async def test_returns_list_of_lists_of_floats(self):
+        """Return list of lists of floats."""
         embedder, _ = _make_embedder(
             [_embedding_response([[0.1, 0.2], [0.3, 0.4]])],
         )
@@ -105,6 +115,7 @@ class TestOpenAIEmbedderEmbed:
         assert result == [[0.1], [0.2], [0.3]]
 
     async def test_preserves_order_across_batches(self):
+        """Preserves order across batches."""
         embedder, _ = _make_embedder(
             [
                 _embedding_response([[1.0], [2.0]]),
@@ -116,19 +127,33 @@ class TestOpenAIEmbedderEmbed:
         assert result == [[1.0], [2.0], [3.0], [4.0]]
 
 
+class TestOpenAIEmbedderModelId:
+    """Tests for the model_id cache-key identity."""
+
+    def test_model_id_is_the_model_name(self):
+        """model_id reflects the configured OpenAI model name."""
+        embedder = OpenAIEmbedder(model_name="text-embedding-3-large")
+        assert embedder.model_id == "text-embedding-3-large"
+
+
 class TestOpenAIEmbedderClose:
+    """Tests for open a i embedder close."""
+
     async def test_close_delegates_to_client_and_clears_reference(self):
+        """Close delegates to client and clears reference."""
         embedder, mock_client = _make_embedder()
         await embedder.close()
         mock_client.close.assert_called_once()
         assert embedder._client is None
 
     async def test_close_is_safe_when_client_never_created(self):
+        """Close is safe when client never created."""
         embedder = OpenAIEmbedder()
         await embedder.close()
         assert embedder._client is None
 
     async def test_async_context_manager_calls_close(self):
+        """Context manager calls close."""
         embedder, mock_client = _make_embedder()
         async with embedder as ctx:
             assert ctx is embedder

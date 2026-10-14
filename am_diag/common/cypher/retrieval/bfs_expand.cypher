@@ -8,6 +8,6 @@ MATCH path = (s)-[:RELATES_TO*1..$depth]->(n:Entity)
 WITH n, min(length(path)) AS hop,
      collect(DISTINCT last(relationships(path)).type)[0..3] AS rels
 WHERE hop <= $depth
-RETURN n.id AS id, labels(n) AS labels, n.name AS name, hop, rels
+RETURN n.id AS id, n.label AS label, n.name AS name, hop, rels
 ORDER BY hop ASC, n.name
 LIMIT $limit

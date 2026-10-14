@@ -34,11 +34,15 @@ def _make_embedder(
 
 
 class TestSentenceTransformersEmbedderLazyInit:
+    """Tests for lazy model initialisation."""
+
     def test_model_is_none_before_first_call(self):
+        """Verify _model is None before first call."""
         embedder = SentenceTransformersEmbedder()
         assert embedder._model is None
 
     async def test_get_model_creates_model(self):
+        """Verify _get_model creates a new model instance."""
         with patch(_PATCH_TARGET) as mock_cls:
             embedder = SentenceTransformersEmbedder(
                 model_name="all-MiniLM-L6-v2",
@@ -52,6 +56,7 @@ class TestSentenceTransformersEmbedderLazyInit:
             assert model is mock_cls.return_value
 
     async def test_get_model_reuses_existing(self):
+        """Verify _get_model reuses an existing model instance."""
         with patch(_PATCH_TARGET) as mock_cls:
             embedder = SentenceTransformersEmbedder()
             m1 = await embedder._get_model()
@@ -60,6 +65,7 @@ class TestSentenceTransformersEmbedderLazyInit:
             assert m1 is m2
 
     async def test_omits_trust_remote_code_and_model_kwargs_by_default(self):
+        """Verify trust_remote_code is omitted by default."""
         with patch(_PATCH_TARGET) as mock_cls:
             embedder = SentenceTransformersEmbedder()
             await embedder._get_model()
@@ -68,6 +74,7 @@ class TestSentenceTransformersEmbedderLazyInit:
             assert "model_kwargs" not in call_kwargs
 
     async def test_passes_trust_remote_code_and_torch_dtype_when_configured(self):
+        """Verify trust_remote_code and torch_dtype are passed when set."""
         with patch(_PATCH_TARGET) as mock_cls:
             embedder = SentenceTransformersEmbedder(
                 model_name="zeroentropy/zembed-1",
@@ -85,13 +92,17 @@ class TestSentenceTransformersEmbedderLazyInit:
 
 
 class TestSentenceTransformersEmbedderEmbed:
+    """Tests for embed method."""
+
     async def test_returns_empty_list_for_empty_input(self):
+        """Verify embedding zero texts returns empty without calling the model."""
         embedder, model = _make_embedder([])
         result = await embedder.embed([])
         assert result == []
         model.encode.assert_not_called()
 
     async def test_calls_encode_with_expected_kwargs(self):
+        """Verify encode is called with expected keyword arguments."""
         embedder, model = _make_embedder(
             [[0.1, 0.2], [0.3, 0.4]],
             model_name="all-MiniLM-L6-v2",
@@ -109,6 +120,7 @@ class TestSentenceTransformersEmbedderEmbed:
         assert call_kwargs["show_progress_bar"] is False
 
     async def test_returns_list_of_lists_of_floats(self):
+        """Verify output is a list of lists of floats."""
         embedder, _ = _make_embedder([[0.1, 0.2], [0.3, 0.4]])
         result = await embedder.embed(["alpha", "beta"])
         assert isinstance(result, list)
@@ -121,11 +133,13 @@ class TestSentenceTransformersEmbedderEmbed:
         assert result[1] == pytest.approx([0.3, 0.4])
 
     async def test_preserves_input_order(self):
+        """Verify output order matches input order."""
         embedder, _ = _make_embedder([[1.0], [2.0], [3.0]])
         result = await embedder.embed(["first", "second", "third"])
         assert result == [[1.0], [2.0], [3.0]]
 
     async def test_passes_custom_batch_size_and_normalize(self):
+        """Verify custom batch_size and normalize are forwarded."""
         embedder, model = _make_embedder(
             [[0.5]],
             batch_size=4,
@@ -155,7 +169,10 @@ def _make_embedder_with_input_type(
 
 
 class TestSentenceTransformersEmbedderInputType:
+    """Tests for input_type parameter dispatch."""
+
     async def test_generic_input_type_uses_encode(self):
+        """Verify generic input type uses encode method."""
         embedder, model = _make_embedder_with_input_type("generic")
         await embedder.embed(["x"])
         model.encode.assert_called_once()
@@ -163,6 +180,7 @@ class TestSentenceTransformersEmbedderInputType:
         model.encode_query.assert_not_called()
 
     async def test_document_input_type_uses_encode_document(self):
+        """Verify document input type uses encode_document."""
         embedder, model = _make_embedder_with_input_type("document")
         await embedder.embed(["x"])
         model.encode_document.assert_called_once()
@@ -170,6 +188,7 @@ class TestSentenceTransformersEmbedderInputType:
         model.encode_query.assert_not_called()
 
     async def test_query_input_type_uses_encode_query(self):
+        """Verify query input type uses encode_query."""
         embedder, model = _make_embedder_with_input_type("query")
         await embedder.embed(["x"])
         model.encode_query.assert_called_once()
@@ -178,12 +197,16 @@ class TestSentenceTransformersEmbedderInputType:
 
 
 class TestSentenceTransformersEmbedderPrecisionAndDimensions:
+    """Tests for precision and dimension handling."""
+
     async def test_float32_precision_is_omitted(self):
+        """Verify float32 precision is omitted from encode kwargs."""
         embedder, model = _make_embedder([[0.1, 0.2]])
         await embedder.embed(["x"])
         assert "precision" not in model.encode.call_args.kwargs
 
     async def test_non_float32_precision_is_passed(self):
+        """Verify non-float32 precision is passed to encode."""
         embedder, model = _make_embedder(
             [[0.1, 0.2]],
             precision="int8",
@@ -192,6 +215,7 @@ class TestSentenceTransformersEmbedderPrecisionAndDimensions:
         assert model.encode.call_args.kwargs["precision"] == "int8"
 
     async def test_dimensions_maps_to_truncate_dim(self):
+        """Verify dimensions maps to truncate_dim in encode kwargs."""
         embedder, model = _make_embedder(
             [[0.1, 0.2]],
             dimensions=128,
@@ -200,25 +224,53 @@ class TestSentenceTransformersEmbedderPrecisionAndDimensions:
         assert model.encode.call_args.kwargs["truncate_dim"] == 128
 
     async def test_no_dimensions_omits_truncate_dim(self):
+        """Verify truncate_dim is omitted when dimensions is None."""
         embedder, model = _make_embedder([[0.1, 0.2]])
         await embedder.embed(["x"])
         assert "truncate_dim" not in model.encode.call_args.kwargs
 
 
 class TestSentenceTransformersEmbedderClose:
+    """Tests for close / async context manager."""
+
     async def test_close_clears_model_reference(self):
+        """Verify close clears the internal model reference."""
         embedder, _ = _make_embedder([[0.1]])
         assert embedder._model is not None
         await embedder.close()
         assert embedder._model is None
 
     async def test_close_is_safe_when_model_never_loaded(self):
+        """Verify close is safe when model was never loaded."""
         embedder = SentenceTransformersEmbedder()
         await embedder.close()
         assert embedder._model is None
 
     async def test_async_context_manager_calls_close(self):
+        """Verify async context manager calls close on exit."""
         embedder, _ = _make_embedder([[0.1]])
         async with embedder as ctx:
             assert ctx is embedder
         assert embedder._model is None
+
+
+class TestSentenceTransformersEmbedderModelId:
+    """Tests for the model_id cache-key identity."""
+
+    def test_model_id_varies_with_vector_affecting_settings(self):
+        """Settings that change the output vector change the identity."""
+        base = SentenceTransformersEmbedder(model_name="all-MiniLM-L6-v2")
+        unnormalized = SentenceTransformersEmbedder(
+            model_name="all-MiniLM-L6-v2", normalize=False
+        )
+        query = SentenceTransformersEmbedder(
+            model_name="all-MiniLM-L6-v2", input_type="query"
+        )
+        assert len({base.model_id, unnormalized.model_id, query.model_id}) == 3
+
+    def test_model_id_includes_dimension_when_set(self):
+        """A truncation dimension is part of the identity to avoid cache reuse."""
+        embedder = SentenceTransformersEmbedder(
+            model_name="all-MiniLM-L6-v2", dimensions=128
+        )
+        assert "dim=128" in embedder.model_id

@@ -1,104 +1,54 @@
 """Relation retriever: hybrid search on relations, hydrate endpoint entities.
 
-Uses ``hydrate_relations.cypher`` to fetch full relation edges (head/tail
-entities, type, description) from the graph store.
+Uses ``hydrate_relations.cypher`` to fetch full relation edges (props plus the
+``head_id`` / ``tail_id`` endpoints). BFS expansion seeds from those endpoints.
 """
 
 from __future__ import annotations
 
-from uuid import UUID
+from typing import Any
 
-from am_diag.common.cypher.loader import load
 from am_diag.common.data_models.relation import Relation
-from am_diag.common.data_models.search import SearchResult
-from am_diag.db.graph.base import GraphStore
-from am_diag.db.vector.base import VectorStoreBase
-from am_diag.retrieval.config import RetrievalConfig
-from am_diag.retrieval.filters import SearchFilters
-from am_diag.retrieval.methods.hybrid import hybrid_search
-from am_diag.vector.embedding.base import Embedder
+from am_diag.common.data_models.vector_record import VectorHit
+from am_diag.db.graph.serialize import reconstruct_schema_properties
+from am_diag.retrieval.retrievers.base import HybridRetriever
 
 
-class RelationRetriever:
-    """Hybrid search on the ``relation`` collection with graph hydration.
+class RelationRetriever(HybridRetriever):
+    """Hybrid search on the ``relation`` collection with graph hydration."""
 
-    Args:
-        config: Retrieval settings.
-        vector_store: Vector store for the relation collection.
-        graph_store: Graph store for hydration.
-        embedder: Embedder for query vectorisation.
-    """
+    name = "relation"
+    hydrate_cypher = "retrieval/hydrate_relations"
 
-    def __init__(
-        self,
-        config: RetrievalConfig,
-        vector_store: VectorStoreBase,
-        graph_store: GraphStore,
-        embedder: Embedder,
-    ) -> None:
-        """Initialize retriever with config and dependencies."""
-        self._config = config
-        self._store = vector_store
-        self._graph = graph_store
-        self._embedder = embedder
-
-    async def retrieve(
-        self,
-        query: str,
-        filters: SearchFilters | None = None,
-    ) -> list[SearchResult]:
-        """Search relations by semantic similarity to the query.
-
-        Args:
-            query: Natural-language query (e.g., "metformin treats diabetes").
-            filters: Optional metadata filters.
-
-        Returns:
-            Hydrated ``SearchResult`` items, one per matched relation.
-        """
-        hits = await hybrid_search(
-            self._store,
-            self._config.relation_collection,
-            query,
-            self._embedder,
-            limit=self._config.relation_top_k,
-            score_threshold=self._config.relation_score_threshold,
-            filters=filters,
+    def _build(self, hit: VectorHit, row: dict[str, Any]) -> Relation:
+        """Build a ``Relation`` from the hydrated row props."""
+        props = row.get("props", {}) or {}
+        return Relation(
+            id=hit.id,
+            head_id=row.get("head_id"),
+            tail_id=row.get("tail_id"),
+            head_name=props.get("head_name", ""),
+            tail_name=props.get("tail_name", ""),
+            type=props.get("type", ""),
+            description=props.get("description"),
+            structural_label=props.get("structural_label"),
+            sources=props.get("sources", []),
+            schema_properties=reconstruct_schema_properties(Relation, props),
         )
 
-        if not hits:
-            return []
-
-        # Hydrate via graph store
-        hit_ids = [str(h.id) for h in hits]
-        relation_rows = await self._graph.execute_query(
-            load("retrieval/hydrate_relations"),
-            {"ids": hit_ids},
-        )
-        relations_by_id = {r["id"]: r for r in relation_rows}
-
-        results: list[SearchResult] = []
-        for hit in hits:
-            rid = str(hit.id)
-            row = relations_by_id.get(rid, {})
-            props = row.get("props", {}) or {}
-            relation = Relation(
-                id=UUID(rid),
-                head_name=props.get("head_name", ""),
-                tail_name=props.get("tail_name", ""),
-                type=props.get("type", ""),
-                description=props.get("description", None),
-            )
-            results.append(
-                SearchResult(
-                    item=relation,
-                    score=hit.score,
-                    source="relation",
-                    matched_on="hybrid",
-                ),
-            )
-
-        return results
+    async def _seed_ids(
+        self,
+        hits: list[VectorHit],
+        rows: dict[str, dict[str, Any]],
+    ) -> list[str]:
+        """Seed BFS from each relation's head and tail entity ids."""
+        seeds: list[str] = []
+        for row in rows.values():
+            for key in ("head_id", "tail_id"):
+                val = row.get(key)
+                if val:
+                    seeds.append(str(val))
+        return seeds
 
 
 __all__ = ["RelationRetriever"]
