@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 
 class MetricResult(BaseModel):
@@ -25,6 +25,7 @@ class SampleEvaluationResult(BaseModel):
     dataset: str
     metrics: list[MetricResult]
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def aggregate_score(self) -> float:
         """Return the mean metric score for the sample."""

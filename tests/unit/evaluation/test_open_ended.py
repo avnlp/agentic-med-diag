@@ -32,4 +32,10 @@ class TestAnswerEquivalenceEvaluator:
         )()
         with patch("am_diag.evaluation.baml.judge_answer_equivalent", fake):
             result = await AnswerEquivalenceEvaluator().evaluate(sample, "Diabetes")
+        fake.assert_awaited_once_with(
+            question="Q",
+            predicted_answer="Diabetes",
+            reference_answer="diabetes",
+            context=None,
+        )
         assert result.passed is True

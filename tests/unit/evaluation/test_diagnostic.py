@@ -12,7 +12,7 @@ class TestDiagnosisAccuracyEvaluator:
     """Tests for DiagnosisAccuracyEvaluator."""
 
     async def test_uses_baml(self) -> None:
-        """Verify evaluator uses BAML for judging."""
+        """Verify the BAML judgement decides the score, not literal equality."""
         sample = OpenEndedSample(
             sample_id="s2",
             question="Q2",
@@ -28,9 +28,16 @@ class TestDiagnosisAccuracyEvaluator:
         fake.return_value = type(
             "J",
             (),
-            {"is_correct": True, "model_dump": lambda self: {"is_correct": True}},
+            {"is_correct": False, "model_dump": lambda self: {"is_correct": False}},
         )()
         with patch("am_diag.evaluation.baml.judge_diagnosis_correct", fake):
             result = await DiagnosisAccuracyEvaluator().evaluate(sample, "pneumonia")
-        assert result.passed is True
+        fake.assert_awaited_once_with(
+            question="Q2",
+            predicted_diagnosis="pneumonia",
+            true_diagnosis="pneumonia",
+            context=None,
+        )
+        assert result.passed is False
+        assert result.score == 0.0
         assert result.metric_name == "diagnosis_accuracy"

@@ -11,8 +11,10 @@ from am_diag.common.data_models import MCQAccuracyResult, MCQSample, MetricResul
 _THINK_RE = re.compile(r"<think>.*?</think>", re.IGNORECASE | re.DOTALL)
 _ANSWER_RE = re.compile(r"<answer>\s*(.*?)\s*</answer>", re.IGNORECASE | re.DOTALL)
 _BOXED_RE = re.compile(r"\\boxed\{([^}]*)\}")
-_OPTION_RE = re.compile(r"\b([A-Z])\s*[:.)-]?\s*$")
-_LETTER_RE = re.compile(r"\b([A-Z])\b")
+_MARKER_RE = re.compile(
+    r"(?i:\b(?:final\s+)?(?:answer|option|choice))\s*(?:is|:|=)?\s*[(\[]?([A-Z])\b"
+)
+_FINAL_TOKEN_RE = re.compile(r"(?:^|\s)[(\[]?([A-Z])[)\].:]?\s*$")
 
 
 def _normalize(text: str) -> str:
@@ -44,55 +46,40 @@ def _answer_text_map(sample: MCQSample) -> dict[str, str]:
 
 def _score_single(sample: MCQSample, prediction: str) -> MCQAccuracyResult:
     cleaned = _clean_prediction(prediction)
-    answer_text_map = _answer_text_map(sample)
-    cleaned_lower = cleaned.lower()
+    answer_key = sample.answer_key.upper()
+    answer_text = _answer_text_map(sample)[answer_key]
 
-    if cleaned.upper() == sample.answer_key:
+    if cleaned.upper() == answer_key:
+        return MCQAccuracyResult(True, "exact_letter", answer_key, answer_key)
+
+    if cleaned.lower() == answer_text:
+        return MCQAccuracyResult(True, "exact_answer_text", answer_key, answer_key)
+
+    markers = _MARKER_RE.findall(cleaned)
+    if markers:
         return MCQAccuracyResult(
-            True,
-            "exact_letter",
-            sample.answer_key,
-            sample.answer_key,
+            markers[-1] == answer_key,
+            "answer_marker",
+            markers[-1],
+            answer_key,
         )
 
-    if cleaned_lower == answer_text_map[sample.answer_key]:
+    final_token = _FINAL_TOKEN_RE.search(cleaned)
+    if final_token:
         return MCQAccuracyResult(
-            True,
-            "exact_answer_text",
-            sample.answer_key,
-            sample.answer_key,
+            final_token.group(1) == answer_key,
+            "final_token",
+            final_token.group(1),
+            answer_key,
         )
 
-    match = _OPTION_RE.search(cleaned.upper())
-    if match and match.group(1) == sample.answer_key:
-        return MCQAccuracyResult(
-            True,
-            "terminal_option",
-            sample.answer_key,
-            sample.answer_key,
-        )
-
-    last_letter = _LETTER_RE.findall(cleaned.upper())
-    if last_letter and last_letter[-1] == sample.answer_key:
-        return MCQAccuracyResult(
-            True,
-            "tail_letter",
-            sample.answer_key,
-            sample.answer_key,
-        )
-
-    return MCQAccuracyResult(
-        False,
-        "no_match",
-        last_letter[-1] if last_letter else None,
-        sample.answer_key,
-    )
+    return MCQAccuracyResult(False, "no_match", None, answer_key)
 
 
 def _score_multi(sample: MCQSample, prediction: str) -> MCQAccuracyResult:
     cleaned = _clean_prediction(prediction)
     predicted = sorted(dict.fromkeys(_extract_multi_answer(cleaned)))
-    correct = sorted(dict.fromkeys(sample.answer_keys))
+    correct = sorted({key.upper() for key in sample.answer_keys})
     is_correct = predicted == correct
     return MCQAccuracyResult(
         is_correct,

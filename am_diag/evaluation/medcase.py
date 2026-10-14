@@ -50,9 +50,9 @@ class MedCaseReasoningEvaluator:
         if reasoning_items:
             reasoning = await baml.judge_reasoning_recall(
                 ground_truth_reasons=reasoning_items,
-                predicted_trace=prediction_answer,
+                predicted_trace=prediction,
             )
-            reasoning_score = reasoning.recall_score
+            reasoning_score = min(max(reasoning.recall_score, 0.0), 1.0)
 
         details = diagnosis.model_dump()
         if reasoning is not None:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import Protocol, TypeVar, runtime_checkable
 
 from am_diag.common.data_models import (
     MCQSample,
@@ -13,18 +13,26 @@ from am_diag.common.data_models import (
 )
 
 
-# Any sample an evaluator may receive. Each evaluator accepts its own concrete
-# type; the union keeps the shared contract honest without reaching for generics.
 Sample = MCQSample | OpenEndedSample | RubricSample | RARMedSample
+
+SampleT_contra = TypeVar("SampleT_contra", contravariant=True)
 
 
 @runtime_checkable
-class Evaluator(Protocol):
-    """Score one prediction for one sample as a single MetricResult."""
+class Evaluator(Protocol[SampleT_contra]):
+    """Score one prediction for one sample as a single MetricResult.
+
+    Each evaluator accepts its own sample type, so the protocol is generic
+    over it.
+    """
 
     metric_name: str
 
-    async def evaluate(self, sample: Sample, prediction: str) -> MetricResult:
+    async def evaluate(
+        self,
+        sample: SampleT_contra,
+        prediction: str,
+    ) -> MetricResult:
         """Return the metric result for ``prediction`` against ``sample``."""
         ...
 
