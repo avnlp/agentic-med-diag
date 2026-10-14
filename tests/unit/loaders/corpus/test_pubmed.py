@@ -43,6 +43,8 @@ class TestPubMedCorpusLoader:
             ("pubmed-12345678-0", "12345678", 0),
             ("pubmed-99999999-15", "99999999", 15),
             ("pubmed-1-0", "1", 0),
+            ("pubmed23n0001_0", "pubmed23n0001", 0),
+            ("pubmed23n0001_17", "pubmed23n0001", 17),
         ],
     )
     def test_id_parsing(self, row_id, expected_pubmed_id, expected_idx):

@@ -1,4 +1,4 @@
-exclude: '^(?:_notes/|test_scripts/|thoughts/|am_diag/llm/baml_src/|am_diag/llm/baml_client/|pyproject\.toml$)'
+exclude: '^(?:test_scripts/|am_diag/llm/baml_src/|am_diag/llm/baml_client/|pyproject\.toml$)'
 fail_fast: true
 
 repos:
@@ -54,14 +54,12 @@ repos:
         entry: uv run ty check am_diag/ tests
         language: system
         types: [python]
-        exclude: "^_notes/"
         pass_filenames: false
       - id: pytest
         name: pytest
         entry: uv run pytest tests -m "not integration"
         language: system
         types: [python]
-        exclude: "^_notes/"
         pass_filenames: false
 
   - repo: https://github.com/crate-ci/typos

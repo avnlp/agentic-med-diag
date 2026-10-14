@@ -11,7 +11,7 @@ import re
 from am_diag.loaders.corpus.textbooks import TextbooksCorpusLoader
 
 
-_TEXTBOOKS_ID_RE = re.compile(r"^textbooks-.+_\d+$")
+_TEXTBOOKS_ID_RE = re.compile(r"^.+_\d+$")
 
 
 class TestTextbooksCorpusLoader:
@@ -37,6 +37,9 @@ class TestTextbooksCorpusLoader:
         for c in chunks:
             assert c.external_id is not None, "external_id must not be None"
             assert _TEXTBOOKS_ID_RE.match(c.external_id)
+            book_name, _, chunk_index = c.external_id.rpartition("_")
+            assert c.properties["book_name"] == book_name
+            assert c.properties["chunk_index"] == int(chunk_index)
 
     def test_derived_properties_non_empty(self):
         """Test that book_name is non-empty and chunk_index is valid."""

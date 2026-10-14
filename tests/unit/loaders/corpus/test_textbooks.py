@@ -66,6 +66,7 @@ class TestTextbooksCorpusLoader:
         [
             ("textbooks-Gray_Anatomy_0", "Gray_Anatomy", 0),
             ("textbooks-Gray_Anatomy_12", "Gray_Anatomy", 12),
+            ("Anatomy_Gray_17", "Anatomy_Gray", 17),
             (
                 "textbooks-Harrison_Internal_Medicine_100",
                 "Harrison_Internal_Medicine",

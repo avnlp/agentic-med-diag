@@ -11,7 +11,7 @@ import re
 from am_diag.loaders.corpus.pubmed import PubMedCorpusLoader
 
 
-_PUBMED_ID_RE = re.compile(r"^pubmed-\w+-\d+$")
+_PUBMED_ID_RE = re.compile(r"^pubmed\d+n\d+_\d+$")
 
 
 class TestPubMedCorpusLoader:
@@ -37,6 +37,9 @@ class TestPubMedCorpusLoader:
         for c in chunks:
             assert c.external_id is not None, "external_id must not be None"
             assert _PUBMED_ID_RE.match(c.external_id)
+            source_id, _, chunk_index = c.external_id.rpartition("_")
+            assert c.properties["pubmed_id"] == source_id
+            assert c.properties["chunk_index"] == int(chunk_index)
 
     def test_derived_properties_non_empty(self):
         """Test that pubmed_id and chunk_index are present with valid types."""
