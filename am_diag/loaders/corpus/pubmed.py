@@ -32,9 +32,9 @@ class PubMedCorpusLoader(CorpusLoader):
             return None
 
         doc_id = row["id"]
-        # id format: "pubmed-<pubmed_id>-<chunk_index>" (hyphen-separated).
         stripped = doc_id.removeprefix("pubmed-")
-        pubmed_id, _, index_str = stripped.rpartition("-")
+        separator = "-" if doc_id.startswith("pubmed-") else "_"
+        pubmed_id, _, index_str = stripped.rpartition(separator)
         if not pubmed_id:
             pubmed_id = stripped
             index_str = ""
