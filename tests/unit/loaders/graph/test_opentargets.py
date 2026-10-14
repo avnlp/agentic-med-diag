@@ -11,11 +11,11 @@ from am_diag.loaders.graph.opentargets import OpenTargetsGraphLoader
 from am_diag.loaders.graph.reference_data import ReferenceData
 
 
-def _write_ot(root: Path) -> None:
-    ot = root / "opentargets"
+def _write_opentargets(root: Path) -> None:
+    opentargets_dir = root / "opentargets"
 
     def _write(name: str, frame: pl.DataFrame) -> None:
-        directory = ot / name
+        directory = opentargets_dir / name
         directory.mkdir(parents=True, exist_ok=True)
         frame.write_parquet(directory / "part-0.parquet")
 
@@ -88,7 +88,7 @@ class TestOpenTargetsLoader:
 
     def test_build_frames(self, reference_dir: Path) -> None:
         """All Open Targets edge families build with correct labels/relations."""
-        _write_ot(reference_dir)
+        _write_opentargets(reference_dir)
         reference = ReferenceData(reference_dir)
         loader = OpenTargetsGraphLoader(
             reference_dir, reference=reference, enricher=NodeEnricher(reference)
@@ -115,7 +115,7 @@ class TestOpenTargetsLoader:
 
     def test_schema_covers_emitted_types(self, reference_dir: Path) -> None:
         """Emitted labels and relation types fall within the authored schema."""
-        _write_ot(reference_dir)
+        _write_opentargets(reference_dir)
         reference = ReferenceData(reference_dir)
         loader = OpenTargetsGraphLoader(
             reference_dir, reference=reference, enricher=NodeEnricher(reference)
