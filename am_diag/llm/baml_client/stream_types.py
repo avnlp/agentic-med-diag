@@ -23,8 +23,13 @@ class StreamState(BaseModel, typing.Generic[StreamStateValueT]):
     value: StreamStateValueT
     state: typing_extensions.Literal["Pending", "Incomplete", "Complete"]
 # #########################################################################
-# Generated classes (12)
+# Generated classes (17)
 # #########################################################################
+
+class AnswerEquivalenceJudgement(BaseModel):
+    is_correct: typing.Optional[bool] = None
+    explanation: typing.Optional[str] = None
+    matched_reference: typing.Optional[str] = None
 
 class ClusterDeduplicationVerdict(BaseModel):
     duplicates: typing.List[str] = Field(description='Exact matches to items in the candidate set that mean the same thing as the item')
@@ -41,6 +46,11 @@ class CommunityReportOutput(BaseModel):
 class CypherQuery(BaseModel):
     cypher: typing.Optional[str] = Field(default=None, description='A valid read-only Cypher MATCH/RETURN query answering the question. No mutations.')
     reasoning: typing.Optional[str] = Field(default=None, description='One sentence: what the query finds and why this structure was chosen')
+
+class DiagnosisJudgement(BaseModel):
+    is_correct: typing.Optional[bool] = None
+    explanation: typing.Optional[str] = None
+    matched_diagnosis: typing.Optional[str] = None
 
 class ExtractedEntity(BaseModel):
     name: typing.Optional[str] = Field(default=None, description='Canonical name. Use generic/INN for drugs, HGNC symbol for genes.')
@@ -73,6 +83,17 @@ class MapKeyPoint(BaseModel):
 class MapResponse(BaseModel):
     points: typing.List["MapKeyPoint"]
 
+class ReasoningMatch(BaseModel):
+    reason_index: typing.Optional[int] = None
+    matched: typing.Optional[bool] = None
+    matched_statements: typing.List[str]
+    explanation: typing.Optional[str] = None
+
+class ReasoningRecallJudgement(BaseModel):
+    matches: typing.List["ReasoningMatch"]
+    recall_score: typing.Optional[float] = None
+    explanation: typing.Optional[str] = None
+
 class ReduceAnswer(BaseModel):
     answer: typing.Optional[str] = Field(default=None, description='Synthesized answer from all analyst reports')
     key_themes: typing.List[str] = Field(description='Major themes identified across communities')
@@ -83,6 +104,11 @@ class Resume(BaseModel):
     email: typing.Optional[str] = None
     experience: typing.List[str]
     skills: typing.List[str]
+
+class RubricCriterionJudgement(BaseModel):
+    criterion_id: typing.Optional[str] = None
+    criteria_met: typing.Optional[bool] = None
+    explanation: typing.Optional[str] = None
 
 class SamenessVerdict(BaseModel):
     areSameEntity: typing.Optional[bool] = None

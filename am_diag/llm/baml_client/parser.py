@@ -59,6 +59,30 @@ class LlmResponseParser:
         __result__ = self.__options.merge_options(baml_options).parse_response(function_name="IdentifyClusterDuplicates", llm_response=llm_response, mode="request")
         return typing.cast(types.ClusterDeduplicationVerdict, __result__)
 
+    def JudgeAnswerEquivalent(
+        self, llm_response: str, baml_options: BamlCallOptions = {},
+    ) -> types.AnswerEquivalenceJudgement:
+        __result__ = self.__options.merge_options(baml_options).parse_response(function_name="JudgeAnswerEquivalent", llm_response=llm_response, mode="request")
+        return typing.cast(types.AnswerEquivalenceJudgement, __result__)
+
+    def JudgeDiagnosisCorrect(
+        self, llm_response: str, baml_options: BamlCallOptions = {},
+    ) -> types.DiagnosisJudgement:
+        __result__ = self.__options.merge_options(baml_options).parse_response(function_name="JudgeDiagnosisCorrect", llm_response=llm_response, mode="request")
+        return typing.cast(types.DiagnosisJudgement, __result__)
+
+    def JudgeReasoningRecall(
+        self, llm_response: str, baml_options: BamlCallOptions = {},
+    ) -> types.ReasoningRecallJudgement:
+        __result__ = self.__options.merge_options(baml_options).parse_response(function_name="JudgeReasoningRecall", llm_response=llm_response, mode="request")
+        return typing.cast(types.ReasoningRecallJudgement, __result__)
+
+    def JudgeRubricCriterion(
+        self, llm_response: str, baml_options: BamlCallOptions = {},
+    ) -> types.RubricCriterionJudgement:
+        __result__ = self.__options.merge_options(baml_options).parse_response(function_name="JudgeRubricCriterion", llm_response=llm_response, mode="request")
+        return typing.cast(types.RubricCriterionJudgement, __result__)
+
     def MapCommunityBatch(
         self, llm_response: str, baml_options: BamlCallOptions = {},
     ) -> types.MapResponse:
@@ -114,6 +138,30 @@ class LlmStreamParser:
     ) -> stream_types.ClusterDeduplicationVerdict:
         __result__ = self.__options.merge_options(baml_options).parse_response(function_name="IdentifyClusterDuplicates", llm_response=llm_response, mode="stream")
         return typing.cast(stream_types.ClusterDeduplicationVerdict, __result__)
+
+    def JudgeAnswerEquivalent(
+        self, llm_response: str, baml_options: BamlCallOptions = {},
+    ) -> stream_types.AnswerEquivalenceJudgement:
+        __result__ = self.__options.merge_options(baml_options).parse_response(function_name="JudgeAnswerEquivalent", llm_response=llm_response, mode="stream")
+        return typing.cast(stream_types.AnswerEquivalenceJudgement, __result__)
+
+    def JudgeDiagnosisCorrect(
+        self, llm_response: str, baml_options: BamlCallOptions = {},
+    ) -> stream_types.DiagnosisJudgement:
+        __result__ = self.__options.merge_options(baml_options).parse_response(function_name="JudgeDiagnosisCorrect", llm_response=llm_response, mode="stream")
+        return typing.cast(stream_types.DiagnosisJudgement, __result__)
+
+    def JudgeReasoningRecall(
+        self, llm_response: str, baml_options: BamlCallOptions = {},
+    ) -> stream_types.ReasoningRecallJudgement:
+        __result__ = self.__options.merge_options(baml_options).parse_response(function_name="JudgeReasoningRecall", llm_response=llm_response, mode="stream")
+        return typing.cast(stream_types.ReasoningRecallJudgement, __result__)
+
+    def JudgeRubricCriterion(
+        self, llm_response: str, baml_options: BamlCallOptions = {},
+    ) -> stream_types.RubricCriterionJudgement:
+        __result__ = self.__options.merge_options(baml_options).parse_response(function_name="JudgeRubricCriterion", llm_response=llm_response, mode="stream")
+        return typing.cast(stream_types.RubricCriterionJudgement, __result__)
 
     def MapCommunityBatch(
         self, llm_response: str, baml_options: BamlCallOptions = {},

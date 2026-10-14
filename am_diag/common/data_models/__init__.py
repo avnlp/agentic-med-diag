@@ -25,6 +25,12 @@ from am_diag.common.data_models.community_report import CommunityReport, Finding
 from am_diag.common.data_models.document import Document
 from am_diag.common.data_models.entity import Entity
 from am_diag.common.data_models.enums import Distance, ExtractorName
+from am_diag.common.data_models.evaluation import (
+    DatasetEvaluationSummary,
+    MCQAccuracyResult,
+    MetricResult,
+    SampleEvaluationResult,
+)
 from am_diag.common.data_models.knowledge_graph import KnowledgeGraph
 from am_diag.common.data_models.mcq import ExtractedMCQ, MCQSample
 from am_diag.common.data_models.metadata import MetaData
@@ -54,6 +60,7 @@ __all__ = [
     "ConsensusCriterion",
     "ConversationTurn",
     "DataPoint",
+    "DatasetEvaluationSummary",
     "Dedup",
     "Distance",
     "Document",
@@ -68,8 +75,10 @@ __all__ = [
     "ItemCluster",
     "KnowledgeGraph",
     "LLMContext",
+    "MCQAccuracyResult",
     "MCQSample",
     "MetaData",
+    "MetricResult",
     "OpenEndedSample",
     "Provenance",
     "QASample",
@@ -79,6 +88,7 @@ __all__ = [
     "ResolvedAliasMap",
     "RubricCriterion",
     "RubricSample",
+    "SampleEvaluationResult",
     "CypherRow",
     "SearchResult",
     "SubQuestion",

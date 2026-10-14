@@ -16,6 +16,9 @@ from . import stream_types
 
 type_map = {
 
+    "types.AnswerEquivalenceJudgement": types.AnswerEquivalenceJudgement,
+    "stream_types.AnswerEquivalenceJudgement": stream_types.AnswerEquivalenceJudgement,
+
     "types.ClusterDeduplicationVerdict": types.ClusterDeduplicationVerdict,
     "stream_types.ClusterDeduplicationVerdict": stream_types.ClusterDeduplicationVerdict,
 
@@ -24,6 +27,9 @@ type_map = {
 
     "types.CypherQuery": types.CypherQuery,
     "stream_types.CypherQuery": stream_types.CypherQuery,
+
+    "types.DiagnosisJudgement": types.DiagnosisJudgement,
+    "stream_types.DiagnosisJudgement": stream_types.DiagnosisJudgement,
 
     "types.ExtractedEntity": types.ExtractedEntity,
     "stream_types.ExtractedEntity": stream_types.ExtractedEntity,
@@ -43,11 +49,20 @@ type_map = {
     "types.MapResponse": types.MapResponse,
     "stream_types.MapResponse": stream_types.MapResponse,
 
+    "types.ReasoningMatch": types.ReasoningMatch,
+    "stream_types.ReasoningMatch": stream_types.ReasoningMatch,
+
+    "types.ReasoningRecallJudgement": types.ReasoningRecallJudgement,
+    "stream_types.ReasoningRecallJudgement": stream_types.ReasoningRecallJudgement,
+
     "types.ReduceAnswer": types.ReduceAnswer,
     "stream_types.ReduceAnswer": stream_types.ReduceAnswer,
 
     "types.Resume": types.Resume,
     "stream_types.Resume": stream_types.Resume,
+
+    "types.RubricCriterionJudgement": types.RubricCriterionJudgement,
+    "stream_types.RubricCriterionJudgement": stream_types.RubricCriterionJudgement,
 
     "types.SamenessVerdict": types.SamenessVerdict,
     "stream_types.SamenessVerdict": stream_types.SamenessVerdict,

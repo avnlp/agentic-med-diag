@@ -20,7 +20,7 @@ from .globals import DO_NOT_USE_DIRECTLY_UNLESS_YOU_KNOW_WHAT_YOURE_DOING_RUNTIM
 class TypeBuilder(type_builder.TypeBuilder):
     def __init__(self):
         super().__init__(classes=set(
-          ["ClusterDeduplicationVerdict","CommunityReportOutput","CypherQuery","ExtractedEntity","ExtractedKnowledgeGraph","ExtractedRelation","Finding","MapKeyPoint","MapResponse","ReduceAnswer","Resume","SamenessVerdict",]
+          ["AnswerEquivalenceJudgement","ClusterDeduplicationVerdict","CommunityReportOutput","CypherQuery","DiagnosisJudgement","ExtractedEntity","ExtractedKnowledgeGraph","ExtractedRelation","Finding","MapKeyPoint","MapResponse","ReasoningMatch","ReasoningRecallJudgement","ReduceAnswer","Resume","RubricCriterionJudgement","SamenessVerdict",]
         ), enums=set(
           ["EntityType","RelationType",]
         ), runtime=DO_NOT_USE_DIRECTLY_UNLESS_YOU_KNOW_WHAT_YOURE_DOING_RUNTIME)
@@ -39,8 +39,12 @@ class TypeBuilder(type_builder.TypeBuilder):
 
 
     # #########################################################################
-    # Generated classes 12
+    # Generated classes 17
     # #########################################################################
+
+    @property
+    def AnswerEquivalenceJudgement(self) -> "AnswerEquivalenceJudgementViewer":
+        return AnswerEquivalenceJudgementViewer(self)
 
     @property
     def ClusterDeduplicationVerdict(self) -> "ClusterDeduplicationVerdictViewer":
@@ -53,6 +57,10 @@ class TypeBuilder(type_builder.TypeBuilder):
     @property
     def CypherQuery(self) -> "CypherQueryViewer":
         return CypherQueryViewer(self)
+
+    @property
+    def DiagnosisJudgement(self) -> "DiagnosisJudgementViewer":
+        return DiagnosisJudgementViewer(self)
 
     @property
     def ExtractedEntity(self) -> "ExtractedEntityViewer":
@@ -79,12 +87,24 @@ class TypeBuilder(type_builder.TypeBuilder):
         return MapResponseViewer(self)
 
     @property
+    def ReasoningMatch(self) -> "ReasoningMatchViewer":
+        return ReasoningMatchViewer(self)
+
+    @property
+    def ReasoningRecallJudgement(self) -> "ReasoningRecallJudgementViewer":
+        return ReasoningRecallJudgementViewer(self)
+
+    @property
     def ReduceAnswer(self) -> "ReduceAnswerViewer":
         return ReduceAnswerViewer(self)
 
     @property
     def Resume(self) -> "ResumeViewer":
         return ResumeViewer(self)
+
+    @property
+    def RubricCriterionJudgement(self) -> "RubricCriterionJudgementViewer":
+        return RubricCriterionJudgementViewer(self)
 
     @property
     def SamenessVerdict(self) -> "SamenessVerdictViewer":
@@ -186,8 +206,55 @@ class RelationTypeValues:
 
 
 # #########################################################################
-# Generated classes 12
+# Generated classes 17
 # #########################################################################
+
+class AnswerEquivalenceJudgementAst:
+    def __init__(self, tb: type_builder.TypeBuilder):
+        _tb = tb._tb # type: ignore (we know how to use this private attribute)
+        self._bldr = _tb.class_("AnswerEquivalenceJudgement")
+        self._properties: typing.Set[str] = set([  "is_correct",  "explanation",  "matched_reference",  ])
+        self._props = AnswerEquivalenceJudgementProperties(self._bldr, self._properties)
+
+    def type(self) -> baml_py.FieldType:
+        return self._bldr.field()
+
+    @property
+    def props(self) -> "AnswerEquivalenceJudgementProperties":
+        return self._props
+
+
+class AnswerEquivalenceJudgementViewer(AnswerEquivalenceJudgementAst):
+    def __init__(self, tb: type_builder.TypeBuilder):
+        super().__init__(tb)
+
+    
+    def list_properties(self) -> typing.List[typing.Tuple[str, type_builder.ClassPropertyViewer]]:
+        return [(name, type_builder.ClassPropertyViewer(self._bldr.property(name))) for name in self._properties]
+    
+
+
+class AnswerEquivalenceJudgementProperties:
+    def __init__(self, bldr: baml_py.ClassBuilder, properties: typing.Set[str]):
+        self.__bldr = bldr
+        self.__properties = properties # type: ignore (we know how to use this private attribute) # noqa: F821
+
+    
+    
+    @property
+    def is_correct(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("is_correct"))
+    
+    @property
+    def explanation(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("explanation"))
+    
+    @property
+    def matched_reference(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("matched_reference"))
+    
+    
+
 
 class ClusterDeduplicationVerdictAst:
     def __init__(self, tb: type_builder.TypeBuilder):
@@ -330,6 +397,53 @@ class CypherQueryProperties:
     @property
     def reasoning(self) -> type_builder.ClassPropertyViewer:
         return type_builder.ClassPropertyViewer(self.__bldr.property("reasoning"))
+    
+    
+
+
+class DiagnosisJudgementAst:
+    def __init__(self, tb: type_builder.TypeBuilder):
+        _tb = tb._tb # type: ignore (we know how to use this private attribute)
+        self._bldr = _tb.class_("DiagnosisJudgement")
+        self._properties: typing.Set[str] = set([  "is_correct",  "explanation",  "matched_diagnosis",  ])
+        self._props = DiagnosisJudgementProperties(self._bldr, self._properties)
+
+    def type(self) -> baml_py.FieldType:
+        return self._bldr.field()
+
+    @property
+    def props(self) -> "DiagnosisJudgementProperties":
+        return self._props
+
+
+class DiagnosisJudgementViewer(DiagnosisJudgementAst):
+    def __init__(self, tb: type_builder.TypeBuilder):
+        super().__init__(tb)
+
+    
+    def list_properties(self) -> typing.List[typing.Tuple[str, type_builder.ClassPropertyViewer]]:
+        return [(name, type_builder.ClassPropertyViewer(self._bldr.property(name))) for name in self._properties]
+    
+
+
+class DiagnosisJudgementProperties:
+    def __init__(self, bldr: baml_py.ClassBuilder, properties: typing.Set[str]):
+        self.__bldr = bldr
+        self.__properties = properties # type: ignore (we know how to use this private attribute) # noqa: F821
+
+    
+    
+    @property
+    def is_correct(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("is_correct"))
+    
+    @property
+    def explanation(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("explanation"))
+    
+    @property
+    def matched_diagnosis(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("matched_diagnosis"))
     
     
 
@@ -620,6 +734,104 @@ class MapResponseProperties:
     
 
 
+class ReasoningMatchAst:
+    def __init__(self, tb: type_builder.TypeBuilder):
+        _tb = tb._tb # type: ignore (we know how to use this private attribute)
+        self._bldr = _tb.class_("ReasoningMatch")
+        self._properties: typing.Set[str] = set([  "reason_index",  "matched",  "matched_statements",  "explanation",  ])
+        self._props = ReasoningMatchProperties(self._bldr, self._properties)
+
+    def type(self) -> baml_py.FieldType:
+        return self._bldr.field()
+
+    @property
+    def props(self) -> "ReasoningMatchProperties":
+        return self._props
+
+
+class ReasoningMatchViewer(ReasoningMatchAst):
+    def __init__(self, tb: type_builder.TypeBuilder):
+        super().__init__(tb)
+
+    
+    def list_properties(self) -> typing.List[typing.Tuple[str, type_builder.ClassPropertyViewer]]:
+        return [(name, type_builder.ClassPropertyViewer(self._bldr.property(name))) for name in self._properties]
+    
+
+
+class ReasoningMatchProperties:
+    def __init__(self, bldr: baml_py.ClassBuilder, properties: typing.Set[str]):
+        self.__bldr = bldr
+        self.__properties = properties # type: ignore (we know how to use this private attribute) # noqa: F821
+
+    
+    
+    @property
+    def reason_index(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("reason_index"))
+    
+    @property
+    def matched(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("matched"))
+    
+    @property
+    def matched_statements(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("matched_statements"))
+    
+    @property
+    def explanation(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("explanation"))
+    
+    
+
+
+class ReasoningRecallJudgementAst:
+    def __init__(self, tb: type_builder.TypeBuilder):
+        _tb = tb._tb # type: ignore (we know how to use this private attribute)
+        self._bldr = _tb.class_("ReasoningRecallJudgement")
+        self._properties: typing.Set[str] = set([  "matches",  "recall_score",  "explanation",  ])
+        self._props = ReasoningRecallJudgementProperties(self._bldr, self._properties)
+
+    def type(self) -> baml_py.FieldType:
+        return self._bldr.field()
+
+    @property
+    def props(self) -> "ReasoningRecallJudgementProperties":
+        return self._props
+
+
+class ReasoningRecallJudgementViewer(ReasoningRecallJudgementAst):
+    def __init__(self, tb: type_builder.TypeBuilder):
+        super().__init__(tb)
+
+    
+    def list_properties(self) -> typing.List[typing.Tuple[str, type_builder.ClassPropertyViewer]]:
+        return [(name, type_builder.ClassPropertyViewer(self._bldr.property(name))) for name in self._properties]
+    
+
+
+class ReasoningRecallJudgementProperties:
+    def __init__(self, bldr: baml_py.ClassBuilder, properties: typing.Set[str]):
+        self.__bldr = bldr
+        self.__properties = properties # type: ignore (we know how to use this private attribute) # noqa: F821
+
+    
+    
+    @property
+    def matches(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("matches"))
+    
+    @property
+    def recall_score(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("recall_score"))
+    
+    @property
+    def explanation(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("explanation"))
+    
+    
+
+
 class ReduceAnswerAst:
     def __init__(self, tb: type_builder.TypeBuilder):
         _tb = tb._tb # type: ignore (we know how to use this private attribute)
@@ -714,6 +926,53 @@ class ResumeProperties:
     @property
     def skills(self) -> type_builder.ClassPropertyViewer:
         return type_builder.ClassPropertyViewer(self.__bldr.property("skills"))
+    
+    
+
+
+class RubricCriterionJudgementAst:
+    def __init__(self, tb: type_builder.TypeBuilder):
+        _tb = tb._tb # type: ignore (we know how to use this private attribute)
+        self._bldr = _tb.class_("RubricCriterionJudgement")
+        self._properties: typing.Set[str] = set([  "criterion_id",  "criteria_met",  "explanation",  ])
+        self._props = RubricCriterionJudgementProperties(self._bldr, self._properties)
+
+    def type(self) -> baml_py.FieldType:
+        return self._bldr.field()
+
+    @property
+    def props(self) -> "RubricCriterionJudgementProperties":
+        return self._props
+
+
+class RubricCriterionJudgementViewer(RubricCriterionJudgementAst):
+    def __init__(self, tb: type_builder.TypeBuilder):
+        super().__init__(tb)
+
+    
+    def list_properties(self) -> typing.List[typing.Tuple[str, type_builder.ClassPropertyViewer]]:
+        return [(name, type_builder.ClassPropertyViewer(self._bldr.property(name))) for name in self._properties]
+    
+
+
+class RubricCriterionJudgementProperties:
+    def __init__(self, bldr: baml_py.ClassBuilder, properties: typing.Set[str]):
+        self.__bldr = bldr
+        self.__properties = properties # type: ignore (we know how to use this private attribute) # noqa: F821
+
+    
+    
+    @property
+    def criterion_id(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("criterion_id"))
+    
+    @property
+    def criteria_met(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("criteria_met"))
+    
+    @property
+    def explanation(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("explanation"))
     
     
 

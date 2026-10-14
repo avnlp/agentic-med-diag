@@ -172,6 +172,66 @@ class BamlAsyncClient:
                 "item": item,"itemKind": itemKind,"candidateSet": candidateSet,
             })
             return typing.cast(types.ClusterDeduplicationVerdict, __result__.cast_to(types, types, stream_types, False, __runtime__))
+    async def JudgeAnswerEquivalent(self, question: str,predicted_answer: str,reference_answer: str,context: typing.Optional[str] = None,
+        baml_options: BamlCallOptions = {},
+    ) -> types.AnswerEquivalenceJudgement:
+        # Check if on_tick is provided
+        if 'on_tick' in baml_options:
+            # Use streaming internally when on_tick is provided
+            __stream__ = self.stream.JudgeAnswerEquivalent(question=question,predicted_answer=predicted_answer,reference_answer=reference_answer,context=context,
+                baml_options=baml_options)
+            return await __stream__.get_final_response()
+        else:
+            # Original non-streaming code
+            __result__ = await self.__options.merge_options(baml_options).call_function_async(function_name="JudgeAnswerEquivalent", args={
+                "question": question,"predicted_answer": predicted_answer,"reference_answer": reference_answer,"context": context,
+            })
+            return typing.cast(types.AnswerEquivalenceJudgement, __result__.cast_to(types, types, stream_types, False, __runtime__))
+    async def JudgeDiagnosisCorrect(self, question: str,predicted_diagnosis: str,true_diagnosis: str,context: typing.Optional[str] = None,
+        baml_options: BamlCallOptions = {},
+    ) -> types.DiagnosisJudgement:
+        # Check if on_tick is provided
+        if 'on_tick' in baml_options:
+            # Use streaming internally when on_tick is provided
+            __stream__ = self.stream.JudgeDiagnosisCorrect(question=question,predicted_diagnosis=predicted_diagnosis,true_diagnosis=true_diagnosis,context=context,
+                baml_options=baml_options)
+            return await __stream__.get_final_response()
+        else:
+            # Original non-streaming code
+            __result__ = await self.__options.merge_options(baml_options).call_function_async(function_name="JudgeDiagnosisCorrect", args={
+                "question": question,"predicted_diagnosis": predicted_diagnosis,"true_diagnosis": true_diagnosis,"context": context,
+            })
+            return typing.cast(types.DiagnosisJudgement, __result__.cast_to(types, types, stream_types, False, __runtime__))
+    async def JudgeReasoningRecall(self, ground_truth_reasons: typing.List[str],predicted_trace: str,
+        baml_options: BamlCallOptions = {},
+    ) -> types.ReasoningRecallJudgement:
+        # Check if on_tick is provided
+        if 'on_tick' in baml_options:
+            # Use streaming internally when on_tick is provided
+            __stream__ = self.stream.JudgeReasoningRecall(ground_truth_reasons=ground_truth_reasons,predicted_trace=predicted_trace,
+                baml_options=baml_options)
+            return await __stream__.get_final_response()
+        else:
+            # Original non-streaming code
+            __result__ = await self.__options.merge_options(baml_options).call_function_async(function_name="JudgeReasoningRecall", args={
+                "ground_truth_reasons": ground_truth_reasons,"predicted_trace": predicted_trace,
+            })
+            return typing.cast(types.ReasoningRecallJudgement, __result__.cast_to(types, types, stream_types, False, __runtime__))
+    async def JudgeRubricCriterion(self, question_or_conversation: str,assistant_response: str,criterion_text: str,criterion_id: typing.Optional[str] = None,points: typing.Optional[int] = None,
+        baml_options: BamlCallOptions = {},
+    ) -> types.RubricCriterionJudgement:
+        # Check if on_tick is provided
+        if 'on_tick' in baml_options:
+            # Use streaming internally when on_tick is provided
+            __stream__ = self.stream.JudgeRubricCriterion(question_or_conversation=question_or_conversation,assistant_response=assistant_response,criterion_text=criterion_text,criterion_id=criterion_id,points=points,
+                baml_options=baml_options)
+            return await __stream__.get_final_response()
+        else:
+            # Original non-streaming code
+            __result__ = await self.__options.merge_options(baml_options).call_function_async(function_name="JudgeRubricCriterion", args={
+                "question_or_conversation": question_or_conversation,"assistant_response": assistant_response,"criterion_text": criterion_text,"criterion_id": criterion_id,"points": points,
+            })
+            return typing.cast(types.RubricCriterionJudgement, __result__.cast_to(types, types, stream_types, False, __runtime__))
     async def MapCommunityBatch(self, context_data: str,query: str,
         baml_options: BamlCallOptions = {},
     ) -> types.MapResponse:
@@ -283,6 +343,54 @@ class BamlStreamClient:
           lambda x: typing.cast(types.ClusterDeduplicationVerdict, x.cast_to(types, types, stream_types, False, __runtime__)),
           __ctx__,
         )
+    def JudgeAnswerEquivalent(self, question: str,predicted_answer: str,reference_answer: str,context: typing.Optional[str] = None,
+        baml_options: BamlCallOptions = {},
+    ) -> baml_py.BamlStream[stream_types.AnswerEquivalenceJudgement, types.AnswerEquivalenceJudgement]:
+        __ctx__, __result__ = self.__options.merge_options(baml_options).create_async_stream(function_name="JudgeAnswerEquivalent", args={
+            "question": question,"predicted_answer": predicted_answer,"reference_answer": reference_answer,"context": context,
+        })
+        return baml_py.BamlStream[stream_types.AnswerEquivalenceJudgement, types.AnswerEquivalenceJudgement](
+          __result__,
+          lambda x: typing.cast(stream_types.AnswerEquivalenceJudgement, x.cast_to(types, types, stream_types, True, __runtime__)),
+          lambda x: typing.cast(types.AnswerEquivalenceJudgement, x.cast_to(types, types, stream_types, False, __runtime__)),
+          __ctx__,
+        )
+    def JudgeDiagnosisCorrect(self, question: str,predicted_diagnosis: str,true_diagnosis: str,context: typing.Optional[str] = None,
+        baml_options: BamlCallOptions = {},
+    ) -> baml_py.BamlStream[stream_types.DiagnosisJudgement, types.DiagnosisJudgement]:
+        __ctx__, __result__ = self.__options.merge_options(baml_options).create_async_stream(function_name="JudgeDiagnosisCorrect", args={
+            "question": question,"predicted_diagnosis": predicted_diagnosis,"true_diagnosis": true_diagnosis,"context": context,
+        })
+        return baml_py.BamlStream[stream_types.DiagnosisJudgement, types.DiagnosisJudgement](
+          __result__,
+          lambda x: typing.cast(stream_types.DiagnosisJudgement, x.cast_to(types, types, stream_types, True, __runtime__)),
+          lambda x: typing.cast(types.DiagnosisJudgement, x.cast_to(types, types, stream_types, False, __runtime__)),
+          __ctx__,
+        )
+    def JudgeReasoningRecall(self, ground_truth_reasons: typing.List[str],predicted_trace: str,
+        baml_options: BamlCallOptions = {},
+    ) -> baml_py.BamlStream[stream_types.ReasoningRecallJudgement, types.ReasoningRecallJudgement]:
+        __ctx__, __result__ = self.__options.merge_options(baml_options).create_async_stream(function_name="JudgeReasoningRecall", args={
+            "ground_truth_reasons": ground_truth_reasons,"predicted_trace": predicted_trace,
+        })
+        return baml_py.BamlStream[stream_types.ReasoningRecallJudgement, types.ReasoningRecallJudgement](
+          __result__,
+          lambda x: typing.cast(stream_types.ReasoningRecallJudgement, x.cast_to(types, types, stream_types, True, __runtime__)),
+          lambda x: typing.cast(types.ReasoningRecallJudgement, x.cast_to(types, types, stream_types, False, __runtime__)),
+          __ctx__,
+        )
+    def JudgeRubricCriterion(self, question_or_conversation: str,assistant_response: str,criterion_text: str,criterion_id: typing.Optional[str] = None,points: typing.Optional[int] = None,
+        baml_options: BamlCallOptions = {},
+    ) -> baml_py.BamlStream[stream_types.RubricCriterionJudgement, types.RubricCriterionJudgement]:
+        __ctx__, __result__ = self.__options.merge_options(baml_options).create_async_stream(function_name="JudgeRubricCriterion", args={
+            "question_or_conversation": question_or_conversation,"assistant_response": assistant_response,"criterion_text": criterion_text,"criterion_id": criterion_id,"points": points,
+        })
+        return baml_py.BamlStream[stream_types.RubricCriterionJudgement, types.RubricCriterionJudgement](
+          __result__,
+          lambda x: typing.cast(stream_types.RubricCriterionJudgement, x.cast_to(types, types, stream_types, True, __runtime__)),
+          lambda x: typing.cast(types.RubricCriterionJudgement, x.cast_to(types, types, stream_types, False, __runtime__)),
+          __ctx__,
+        )
     def MapCommunityBatch(self, context_data: str,query: str,
         baml_options: BamlCallOptions = {},
     ) -> baml_py.BamlStream[stream_types.MapResponse, types.MapResponse]:
@@ -357,6 +465,34 @@ class BamlHttpRequestClient:
             "item": item,"itemKind": itemKind,"candidateSet": candidateSet,
         }, mode="request")
         return __result__
+    async def JudgeAnswerEquivalent(self, question: str,predicted_answer: str,reference_answer: str,context: typing.Optional[str] = None,
+        baml_options: BamlCallOptions = {},
+    ) -> baml_py.baml_py.HTTPRequest:
+        __result__ = await self.__options.merge_options(baml_options).create_http_request_async(function_name="JudgeAnswerEquivalent", args={
+            "question": question,"predicted_answer": predicted_answer,"reference_answer": reference_answer,"context": context,
+        }, mode="request")
+        return __result__
+    async def JudgeDiagnosisCorrect(self, question: str,predicted_diagnosis: str,true_diagnosis: str,context: typing.Optional[str] = None,
+        baml_options: BamlCallOptions = {},
+    ) -> baml_py.baml_py.HTTPRequest:
+        __result__ = await self.__options.merge_options(baml_options).create_http_request_async(function_name="JudgeDiagnosisCorrect", args={
+            "question": question,"predicted_diagnosis": predicted_diagnosis,"true_diagnosis": true_diagnosis,"context": context,
+        }, mode="request")
+        return __result__
+    async def JudgeReasoningRecall(self, ground_truth_reasons: typing.List[str],predicted_trace: str,
+        baml_options: BamlCallOptions = {},
+    ) -> baml_py.baml_py.HTTPRequest:
+        __result__ = await self.__options.merge_options(baml_options).create_http_request_async(function_name="JudgeReasoningRecall", args={
+            "ground_truth_reasons": ground_truth_reasons,"predicted_trace": predicted_trace,
+        }, mode="request")
+        return __result__
+    async def JudgeRubricCriterion(self, question_or_conversation: str,assistant_response: str,criterion_text: str,criterion_id: typing.Optional[str] = None,points: typing.Optional[int] = None,
+        baml_options: BamlCallOptions = {},
+    ) -> baml_py.baml_py.HTTPRequest:
+        __result__ = await self.__options.merge_options(baml_options).create_http_request_async(function_name="JudgeRubricCriterion", args={
+            "question_or_conversation": question_or_conversation,"assistant_response": assistant_response,"criterion_text": criterion_text,"criterion_id": criterion_id,"points": points,
+        }, mode="request")
+        return __result__
     async def MapCommunityBatch(self, context_data: str,query: str,
         baml_options: BamlCallOptions = {},
     ) -> baml_py.baml_py.HTTPRequest:
@@ -419,6 +555,34 @@ class BamlHttpStreamRequestClient:
     ) -> baml_py.baml_py.HTTPRequest:
         __result__ = await self.__options.merge_options(baml_options).create_http_request_async(function_name="IdentifyClusterDuplicates", args={
             "item": item,"itemKind": itemKind,"candidateSet": candidateSet,
+        }, mode="stream")
+        return __result__
+    async def JudgeAnswerEquivalent(self, question: str,predicted_answer: str,reference_answer: str,context: typing.Optional[str] = None,
+        baml_options: BamlCallOptions = {},
+    ) -> baml_py.baml_py.HTTPRequest:
+        __result__ = await self.__options.merge_options(baml_options).create_http_request_async(function_name="JudgeAnswerEquivalent", args={
+            "question": question,"predicted_answer": predicted_answer,"reference_answer": reference_answer,"context": context,
+        }, mode="stream")
+        return __result__
+    async def JudgeDiagnosisCorrect(self, question: str,predicted_diagnosis: str,true_diagnosis: str,context: typing.Optional[str] = None,
+        baml_options: BamlCallOptions = {},
+    ) -> baml_py.baml_py.HTTPRequest:
+        __result__ = await self.__options.merge_options(baml_options).create_http_request_async(function_name="JudgeDiagnosisCorrect", args={
+            "question": question,"predicted_diagnosis": predicted_diagnosis,"true_diagnosis": true_diagnosis,"context": context,
+        }, mode="stream")
+        return __result__
+    async def JudgeReasoningRecall(self, ground_truth_reasons: typing.List[str],predicted_trace: str,
+        baml_options: BamlCallOptions = {},
+    ) -> baml_py.baml_py.HTTPRequest:
+        __result__ = await self.__options.merge_options(baml_options).create_http_request_async(function_name="JudgeReasoningRecall", args={
+            "ground_truth_reasons": ground_truth_reasons,"predicted_trace": predicted_trace,
+        }, mode="stream")
+        return __result__
+    async def JudgeRubricCriterion(self, question_or_conversation: str,assistant_response: str,criterion_text: str,criterion_id: typing.Optional[str] = None,points: typing.Optional[int] = None,
+        baml_options: BamlCallOptions = {},
+    ) -> baml_py.baml_py.HTTPRequest:
+        __result__ = await self.__options.merge_options(baml_options).create_http_request_async(function_name="JudgeRubricCriterion", args={
+            "question_or_conversation": question_or_conversation,"assistant_response": assistant_response,"criterion_text": criterion_text,"criterion_id": criterion_id,"points": points,
         }, mode="stream")
         return __result__
     async def MapCommunityBatch(self, context_data: str,query: str,
