@@ -165,12 +165,20 @@ class TestHybridRetriever:
         graph = AsyncMock()
         rid = uuid4()
         graph.execute_query = AsyncMock(
-            return_value=[{"id": str(rid), "title": "T", "summary": "S"}],
+            return_value=[
+                {
+                    "id": str(rid),
+                    "community_id": str(uuid4()),
+                    "title": "T",
+                    "summary": "S",
+                }
+            ],
         )
         results = await _community(graph).retrieve_all_at_level(level=1)
 
         assert len(results) == 1
         assert results[0].source == "community_all"
-        assert (
-            graph.execute_query.await_count == 1
-        )  # no discarded community_members query
+        graph.execute_query.assert_awaited_once()
+        query, params = graph.execute_query.await_args.args
+        assert "HAS_REPORT" in query
+        assert params == {"level": 1}

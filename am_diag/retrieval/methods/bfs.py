@@ -16,11 +16,6 @@ from am_diag.db.graph.base import GraphStore
 from am_diag.retrieval.filters import SearchFilters
 
 
-def _type_label(labels: list[str]) -> str:
-    """Return the entity type label, skipping the shared ``Entity`` base label."""
-    return next((label for label in labels if label != "Entity"), "Entity")
-
-
 async def bfs_expand(
     graph_store: GraphStore,
     seed_ids: list[str],
@@ -65,7 +60,7 @@ async def bfs_expand(
                 item=Entity(
                     id=UUID(row["id"]),
                     name=row["name"],
-                    label=_type_label(row["labels"]),
+                    label=row.get("label") or "Entity",
                 ),
                 score=1.0 / (1 + row["hop"]),
                 source="bfs",

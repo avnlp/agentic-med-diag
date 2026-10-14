@@ -33,7 +33,7 @@ class TestBfsExpand:
             [
                 {
                     "id": str(node_id),
-                    "labels": ["Entity", "Drug"],
+                    "label": "Drug",
                     "name": "metformin",
                     "hop": 2,
                 }
@@ -50,9 +50,7 @@ class TestBfsExpand:
 
     async def test_node_without_type_label_falls_back_to_entity(self) -> None:
         """A node with only the base label is labelled Entity."""
-        graph = _graph(
-            [{"id": str(uuid4()), "labels": ["Entity"], "name": "x", "hop": 1}]
-        )
+        graph = _graph([{"id": str(uuid4()), "label": None, "name": "x", "hop": 1}])
 
         results = await bfs_expand(graph, [str(uuid4())])
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from am_diag.common.data_models.entity import Entity
+from am_diag.common.data_models.provenance import Provenance
 from am_diag.common.data_models.vector_record import VectorHit
 from am_diag.db.graph.serialize import reconstruct_schema_properties
 from am_diag.retrieval.retrievers.base import HybridRetriever
@@ -23,16 +24,22 @@ class EntityRetriever(HybridRetriever):
     def _build(self, hit: VectorHit, row: dict[str, Any]) -> Entity:
         """Build a full ``Entity`` from the hydrated row, falling back to payload."""
         props = row.get("props", {}) or {}
-        payload = hit.payload
+        merged = {**hit.payload, **props}
+        provenance = merged.get("provenance")
+        if isinstance(provenance, str):
+            provenance = (
+                Provenance.model_validate_json(provenance) if provenance else None
+            )
         return Entity(
             id=hit.id,
-            name=props.get("name", payload.get("name", "")),
-            label=props.get("label", payload.get("label", "")),
-            description=props.get("description"),
-            score=props.get("score", 1.0),
-            curie=props.get("curie"),
-            canonical_name=props.get("canonical_name"),
-            aliases=props.get("aliases", []),
+            name=merged.get("name", ""),
+            label=merged.get("label", ""),
+            description=merged.get("description"),
+            score=merged.get("score", 1.0),
+            curie=merged.get("curie"),
+            canonical_name=merged.get("canonical_name"),
+            aliases=merged.get("aliases") or [],
+            provenance=provenance,
             schema_properties=reconstruct_schema_properties(Entity, props),
         )
 

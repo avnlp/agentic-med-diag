@@ -87,6 +87,7 @@ class HybridRetriever(ABC):
             limit=self._top_k,
             score_threshold=self._score_threshold,
             filters=filters,
+            alpha=self._config.hybrid_alpha,
         )
         if not hits:
             return []
@@ -109,7 +110,11 @@ class HybridRetriever(ABC):
                     await bfs_expand(
                         self._graph,
                         seeds,
-                        depth=bfs_depth or self._config.traversal_depth,
+                        depth=(
+                            self._config.traversal_depth
+                            if bfs_depth is None
+                            else bfs_depth
+                        ),
                         limit=self._config.traversal_limit,
                         filters=filters,
                     ),

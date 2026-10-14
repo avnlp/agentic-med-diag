@@ -25,6 +25,8 @@ class RelationRetriever(HybridRetriever):
         props = row.get("props", {}) or {}
         return Relation(
             id=hit.id,
+            head_id=row.get("head_id"),
+            tail_id=row.get("tail_id"),
             head_name=props.get("head_name", ""),
             tail_name=props.get("tail_name", ""),
             type=props.get("type", ""),

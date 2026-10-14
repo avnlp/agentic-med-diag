@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import date
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from neo4j.exceptions import Neo4jError
 
 from am_diag.common.schema import MEDICAL_GRAPHRAG_SCHEMA
 from am_diag.db.graph.base import GraphStore
@@ -53,11 +55,33 @@ class TestText2CypherRetriever:
 
     async def test_returns_empty_when_read_only_execution_fails(self, graph):
         """Verify a write rejected by the server yields no results, not a crash."""
-        graph.execute_query.side_effect = [[], RuntimeError("write in read mode")]
+        graph.execute_query.side_effect = [
+            [],
+            Neo4jError._hydrate_neo4j(
+                code="Neo.ClientError.Statement.AccessMode", message="write"
+            ),
+        ]
         with patch(_BAML_TARGET, _baml("MATCH (n) DETACH DELETE n")):
             results = await _retriever(graph).retrieve("wipe everything")
 
         assert results == []
+
+    async def test_reraises_unexpected_execution_failure(self, graph):
+        """Verify outages are not reported as empty search results."""
+        graph.execute_query.side_effect = [[], RuntimeError("connection lost")]
+        with (
+            patch(_BAML_TARGET, _baml("MATCH (n) RETURN n")),
+            pytest.raises(RuntimeError, match="connection lost"),
+        ):
+            await _retriever(graph).retrieve("anything")
+
+    async def test_converts_rows_to_json_safe_values(self, graph):
+        """Verify non-JSON values such as dates become primitives."""
+        graph.execute_query.side_effect = [[], [{"d": date(2020, 1, 2)}]]
+        with patch(_BAML_TARGET, _baml("MATCH (n) RETURN n.d AS d")):
+            results = await _retriever(graph).retrieve("when")
+
+        assert results[0].item.values == {"d": "2020-01-02"}
 
     async def test_returns_empty_when_disabled(self, graph):
         """Verify no query is generated when text2cypher is turned off."""

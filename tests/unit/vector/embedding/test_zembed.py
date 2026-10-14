@@ -54,7 +54,8 @@ class TestZembedEmbedderModelId:
     def test_model_id_includes_dimension(self):
         """Zembed dims are learned projections, so the dim is part of identity."""
         embedder = _make_zembed_embedder(dimensions=640)
-        assert embedder.model_id == f"{ZEMBED_MODEL_NAME}@640"
+        assert embedder.model_id.startswith(ZEMBED_MODEL_NAME)
+        assert "dim=640" in embedder.model_id
 
     def test_model_id_distinguishes_dimensions(self):
         """Two zembed dims of the same model never share an embedding cache key."""

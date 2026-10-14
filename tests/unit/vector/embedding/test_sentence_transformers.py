@@ -257,14 +257,20 @@ class TestSentenceTransformersEmbedderClose:
 class TestSentenceTransformersEmbedderModelId:
     """Tests for the model_id cache-key identity."""
 
-    def test_model_id_is_model_name_without_dimensions(self):
-        """Without a truncation dimension, model_id is just the model name."""
-        embedder = SentenceTransformersEmbedder(model_name="all-MiniLM-L6-v2")
-        assert embedder.model_id == "all-MiniLM-L6-v2"
+    def test_model_id_varies_with_vector_affecting_settings(self):
+        """Settings that change the output vector change the identity."""
+        base = SentenceTransformersEmbedder(model_name="all-MiniLM-L6-v2")
+        unnormalized = SentenceTransformersEmbedder(
+            model_name="all-MiniLM-L6-v2", normalize=False
+        )
+        query = SentenceTransformersEmbedder(
+            model_name="all-MiniLM-L6-v2", input_type="query"
+        )
+        assert len({base.model_id, unnormalized.model_id, query.model_id}) == 3
 
     def test_model_id_includes_dimension_when_set(self):
         """A truncation dimension is part of the identity to avoid cache reuse."""
         embedder = SentenceTransformersEmbedder(
             model_name="all-MiniLM-L6-v2", dimensions=128
         )
-        assert embedder.model_id == "all-MiniLM-L6-v2@128"
+        assert "dim=128" in embedder.model_id

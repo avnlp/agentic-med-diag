@@ -40,7 +40,9 @@ class CommunityRetriever(HybridRetriever):
         rows: dict[str, dict[str, Any]],
     ) -> list[str]:
         """Seed BFS from the member entities of the matched communities."""
-        ids = [str(h.id) for h in hits]
+        ids = [h.payload["community_id"] for h in hits if h.payload.get("community_id")]
+        if not ids:
+            return []
         out = await self._graph.execute_query(
             load("retrieval/community_seed_entities"),
             {"ids": ids},
@@ -68,7 +70,7 @@ class CommunityRetriever(HybridRetriever):
             SearchResult(
                 item=CommunityReport(
                     id=r["id"],
-                    community_id=r["id"],
+                    community_id=r.get("community_id") or r["id"],
                     title=r.get("title", ""),
                     summary=r.get("summary", ""),
                 ),
