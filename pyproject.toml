@@ -54,6 +54,7 @@ dependencies = [
 ]
 
 [project.scripts]
+am-diag = "am_diag.cli.main:main"
 am-diag-ingest = "am_diag.pipelines.ingestion:main"
 am-diag-qa = "am_diag.pipelines.qa:main"
 
