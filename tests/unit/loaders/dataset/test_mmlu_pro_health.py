@@ -33,7 +33,7 @@ class TestMMLUProHealthDataset(ShuffleTestMixin):
 
     def make_row(self, **overrides: Any) -> dict[str, Any]:
         """Return a valid row for the shared shuffle tests."""
-        return make_list_letter_answer_row(category="health", **overrides)
+        return make_list_letter_answer_row(**{"category": "health", **overrides})
 
     def _patch_and_load(
         self,
