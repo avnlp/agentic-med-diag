@@ -123,7 +123,7 @@ Environment setup details are in @CONTRIBUTING.md. If a tool such as `uv`, `pyte
 - Use `snake_case` for functions and variables, `PascalCase` for classes, and `test_*.py` for tests.
 - Prefer descriptive names. Avoid abbreviations such as `ver` when `version` is clearer, or `rp` when `requires_python` is clearer.
 - Prefer top-level imports. Use local imports only when needed to avoid cycles, optional dependency import costs, or test-specific patching patterns already used nearby.
-- Dependencies point inward: `ingestion`, `agents`, and `retrieval` must not import `am_diag.api`. They depend on consumer-owned Protocols instead. `tests/unit/architecture/test_layering.py` enforces this.
+- Dependencies point inward: `ingestion`, `agents`, and `retrieval` must not import `am_diag.api`. `tests/unit/architecture/test_layering.py` enforces this.
 - Add type hints to new and modified public APIs.
 - Prefer `TypedDict` over broad `dict`/`Mapping` when documenting structured dictionaries in code.
 - Keep state explicit. Do not dynamically add/read fields with `setattr` and `getattr` when normal attributes or models would be clearer.

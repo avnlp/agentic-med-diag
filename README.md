@@ -303,6 +303,9 @@ uv run am-diag jobs list
 ```python
 from am_diag import Workspace
 from am_diag.common.data_models import GraphConnection, VectorConnection
+from am_diag.loaders.corpus import StatPearlsCorpusLoader
+
+questions = ["First-line treatments for hypertension in type 2 diabetes?"]
 
 async with Workspace.from_env() as client:
     # Admin: register a graph + project (Registry-backed, env-ref secrets)
@@ -316,7 +319,7 @@ async with Workspace.from_env() as client:
     await client.projects.create("clinical", graph_ids=["med"])
 
     # Ingestion: a durable, resumable, content-cached job
-    job = await client.graph("med").ingest(sources=[statpearls_loader, drugbank_loader])
+    job = await client.graph("med").ingest(sources=[StatPearlsCorpusLoader()])
     await job.run(finalize=True)
     await client.graph("med").add_fact(head="aspirin", relation="TREATS", tail="fever")
 
@@ -334,16 +337,20 @@ async with Workspace.from_env() as client:
 
     # Curation
     page = await client.graph("med").entities.list(limit=100, label="Drug")
-    await client.graph("med").entities.update(entity_id, canonical_name="Acetylsalicylic acid")
+    entity = page.items[0]
+    await client.graph("med").entities.update(
+        str(entity.id), canonical_name="Acetylsalicylic acid"
+    )
 ```
 
 Stream the agent's progress as typed events (`plan`, `tool_call`, `verifier`, `token`, `final`):
 
 ```python
-from am_diag.agents import stream_answer
+from am_diag import Workspace
 
-async for event in stream_answer("What treats sepsis?", search_engine=engine):
-    print(event.type)
+async with Workspace.from_env() as client:
+    async for event in client.project("clinical").stream("What treats sepsis?"):
+        print(event.type)
 ```
 
 ## Project Structure
