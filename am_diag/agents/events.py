@@ -54,47 +54,78 @@ def map_event(event: dict[str, Any]) -> AgentEvent | None:
             result_preview=str(data.get("output", ""))[:200],
         )
     if kind == "on_chat_model_stream":
+        if _is_nested(event.get("metadata")):
+            return None
         return _token_event(data.get("chunk"))
     if kind in _STRUCTURED_EVENTS:
         return _structured_event(data.get("output"))
     return None
 
 
+def _is_nested(metadata: dict[str, Any] | None) -> bool:
+    """Return whether an event comes from a subagent graph.
+
+    Subagents run inside a tool node of the orchestrator graph, so their
+    checkpoint namespace has more than one ``|``-separated segment. Only the
+    orchestrator's own output is user-facing.
+    """
+    metadata = metadata or {}
+    namespace = metadata.get("langgraph_checkpoint_ns") or metadata.get(
+        "checkpoint_ns", ""
+    )
+    return "|" in namespace
+
+
+def _text_from_content(content: Any) -> str:
+    """Return the text of message content, which may be a list of blocks."""
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    parts = []
+    for block in content:
+        if isinstance(block, str):
+            parts.append(block)
+        elif isinstance(block, dict) and block.get("type") == "text":
+            parts.append(str(block.get("text", "")))
+    return "".join(parts)
+
+
 def _token_event(chunk: Any) -> TokenEvent | None:
     """Build a TokenEvent from a model-stream chunk (object or dict)."""
-    text = getattr(chunk, "content", None)
-    if text is None and isinstance(chunk, dict):
-        text = chunk.get("content")
-    return TokenEvent(text=str(text)) if text else None
+    content = getattr(chunk, "content", None)
+    if content is None and isinstance(chunk, dict):
+        content = chunk.get("content")
+    text = _text_from_content(content)
+    return TokenEvent(text=text) if text else None
+
+
+def _typed_event(value: Any) -> AgentEvent | None:
+    """Map a typed domain object to its plan/verifier/final event."""
+    if isinstance(value, ClinicalAnswer):
+        return FinalEvent(answer=value)
+    if isinstance(value, AgentPlan):
+        return PlanEvent(plan=value)
+    if isinstance(value, SufficientContext):
+        return VerifierEvent(assessment=value)
+    return None
 
 
 def _structured_event(output: Any) -> AgentEvent | None:
     """Map a structured node output to a plan/verifier/final event by type.
 
-    Typed domain objects match directly; a ``structured_response`` dict is
-    coerced to the final :class:`ClinicalAnswer` (the agent's response format).
-    ``AgentPlan`` and ``SufficientContext`` match only as typed objects because
-    both validate from an empty dict and a raw dict would be ambiguous.
+    Typed domain objects match directly, either as the output itself or as the
+    ``structured_response`` of a graph state. A ``structured_response`` dict is
+    coerced to the final :class:`ClinicalAnswer` (the orchestrator's response
+    format). ``AgentPlan`` and ``SufficientContext`` match only as typed objects
+    because both validate from an empty dict and a raw dict would be ambiguous.
     """
-    if isinstance(output, ClinicalAnswer):
-        return FinalEvent(answer=output)
-    if isinstance(output, AgentPlan):
-        return PlanEvent(plan=output)
-    if isinstance(output, SufficientContext):
-        return VerifierEvent(assessment=output)
-    if isinstance(output, dict):
-        return _final_from_dict(output)
-    return None
-
-
-def _final_from_dict(output: dict[str, Any]) -> FinalEvent | None:
-    """Map a ``structured_response`` payload to the final ClinicalAnswer event."""
+    if not isinstance(output, dict):
+        return _typed_event(output)
     structured = output.get("structured_response")
-    if isinstance(structured, ClinicalAnswer):
-        return FinalEvent(answer=structured)
     if isinstance(structured, dict):
         try:
             return FinalEvent(answer=ClinicalAnswer.model_validate(structured))
         except ValidationError:
             return None
-    return None
+    return _typed_event(structured)

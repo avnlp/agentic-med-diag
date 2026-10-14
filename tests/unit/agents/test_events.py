@@ -43,12 +43,13 @@ class TestMapEvent:
 
     def test_tool_end_maps_to_tool_call_preview(self):
         """A tool-end event carries a truncated result preview."""
+        output = "0123456789" * 100
         ev = map_event(
-            {"event": "on_tool_end", "name": "t", "data": {"output": "x" * 500}}
+            {"event": "on_tool_end", "name": "t", "data": {"output": output}}
         )
         assert isinstance(ev, ToolCallEvent)
         assert ev.result_preview is not None
-        assert len(ev.result_preview) <= 200
+        assert ev.result_preview == output[:200]
 
     def test_chat_stream_object_chunk_maps_to_token(self):
         """A model-stream chunk object becomes a TokenEvent."""
@@ -64,6 +65,41 @@ class TestMapEvent:
         )
         assert isinstance(ev, TokenEvent)
         assert ev.text == "hi"
+
+    def test_list_content_chunk_maps_to_text_blocks_only(self):
+        """Content-block chunks yield their text, not the list repr."""
+        chunk = {
+            "content": [
+                {"type": "text", "text": "hel"},
+                {"type": "tool_use", "id": "x"},
+                "lo",
+            ]
+        }
+        ev = map_event({"event": "on_chat_model_stream", "data": {"chunk": chunk}})
+        assert isinstance(ev, TokenEvent)
+        assert ev.text == "hello"
+
+    def test_subagent_token_is_skipped(self):
+        """Tokens from a nested subagent graph are not user-facing."""
+        ev = map_event(
+            {
+                "event": "on_chat_model_stream",
+                "metadata": {"langgraph_checkpoint_ns": "tools:1|model:2"},
+                "data": {"chunk": {"content": "planning"}},
+            }
+        )
+        assert ev is None
+
+    def test_orchestrator_token_is_kept(self):
+        """Tokens from the top-level graph map to a TokenEvent."""
+        ev = map_event(
+            {
+                "event": "on_chat_model_stream",
+                "metadata": {"langgraph_checkpoint_ns": "model:1"},
+                "data": {"chunk": {"content": "answer"}},
+            }
+        )
+        assert isinstance(ev, TokenEvent)
 
     def test_empty_token_is_skipped(self):
         """An empty content chunk yields no event."""
@@ -102,6 +138,30 @@ class TestMapEvent:
         )
         assert isinstance(ev, FinalEvent)
         assert ev.answer.answer == "yes"
+
+    def test_wrapped_plan_maps_to_plan_event(self):
+        """A planner subagent's structured_response becomes a PlanEvent."""
+        plan = AgentPlan(sub_questions=[SubQuestion(text="why?")])
+        ev = map_event(
+            {
+                "event": "on_chain_end",
+                "data": {"output": {"messages": [], "structured_response": plan}},
+            }
+        )
+        assert isinstance(ev, PlanEvent)
+        assert ev.plan is plan
+
+    def test_wrapped_verifier_maps_to_verifier_event(self):
+        """A verifier subagent's structured_response becomes a VerifierEvent."""
+        assessment = SufficientContext(is_sufficient=True, coverage_score=3)
+        ev = map_event(
+            {
+                "event": "on_chain_end",
+                "data": {"output": {"structured_response": assessment}},
+            }
+        )
+        assert isinstance(ev, VerifierEvent)
+        assert ev.assessment is assessment
 
     def test_chain_end_without_structured_output_is_skipped(self):
         """A chain-end with an unrelated dict output yields no event."""
