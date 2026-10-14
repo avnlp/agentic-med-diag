@@ -190,9 +190,6 @@ jobs:
     needs: [test]
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    concurrency:
-      group: am-diag-integration
-      cancel-in-progress: false
 
     steps:
       - name: Checkout code
