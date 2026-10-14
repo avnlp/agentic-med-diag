@@ -1,5 +1,7 @@
 """DrugCentral drug-disease / drug-phenotype loader (DRG-DIS, DRG-PHE).
 
+Emits both ``INDICATION`` and ``CONTRAINDICATION`` edges.
+
 Reads the DrugCentral PostgreSQL dump serverlessly (no server): the ``identifier``
 table supplies each structure's ChEMBL id and ``omop_relationship`` supplies the
 indication/contraindication links keyed by UMLS CUI. Drugs harmonize to ChEMBL and

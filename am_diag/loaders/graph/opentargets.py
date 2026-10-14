@@ -223,7 +223,10 @@ class OpenTargetsGraphLoader(GraphLoader):
         frames = [
             self._enrich_group(endpoints, label) for label in _ABBREV_TO_LABEL.values()
         ]
-        return pl.concat([f for f in frames if f.height > 0], how="diagonal")
+        non_empty = [f for f in frames if f.height > 0]
+        if not non_empty:
+            return pl.DataFrame({"curie": [], "label": [], "name": []})
+        return pl.concat(non_empty, how="diagonal")
 
     def _enrich_group(self, endpoints: pl.DataFrame, label: str) -> pl.DataFrame:
         group = endpoints.filter(pl.col("label") == label)

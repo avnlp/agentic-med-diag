@@ -43,7 +43,7 @@ class TestDisGeNETLoader:
         assert by_to["ENSG1"]["from"] == "MONDO_0005148"
         assert by_to["ENSG1"]["label"] == "DIS-GEN"
         assert by_to["ENSG1"]["type"] == "ASSOCIATED_WITH"
-        assert by_to["ENSG1"]["disgenet_score"] == 0.9
+        assert by_to["ENSG1"]["score"] == 0.9
         assert by_to["ENSG2"]["label"] == "PHE-GEN"
 
         disease = nodes.filter(nodes["curie"] == "MONDO_0005148").row(0, named=True)

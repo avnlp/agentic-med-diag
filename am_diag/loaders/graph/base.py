@@ -32,10 +32,37 @@ from am_diag.loaders.graph.identity import curie_to_entity_id, relation_id
 # core fields: a source property of that name (e.g. a drug's ``description`` or a
 # DisGeNET edge ``score``) must populate the core field, not collide with it.
 _NODE_RESERVED = frozenset(
-    {"curie", "name", "label", "description", "score", "canonical_name", "aliases"}
+    {
+        "curie",
+        "name",
+        "label",
+        "description",
+        "score",
+        "canonical_name",
+        "aliases",
+        "id",
+        "schema_properties",
+        "provenance",
+    }
 )
 _EDGE_RESERVED = frozenset(
-    {"from", "to", "type", "label", "description", "score", "sources"}
+    {
+        "from",
+        "to",
+        "type",
+        "label",
+        "description",
+        "score",
+        "sources",
+        "id",
+        "head_id",
+        "tail_id",
+        "head_name",
+        "tail_name",
+        "structural_label",
+        "schema_properties",
+        "provenance",
+    }
 )
 
 # Streaming work prepared off the event loop: the sliced edge frame, a
@@ -170,15 +197,31 @@ class GraphLoader(ABC):
 
         Yields:
             ``KnowledgeGraph`` batches with ``entities`` and ``relations`` set.
+            Edges whose endpoints are missing from the node frame are skipped, and
+            nodes with no edges are emitted in trailing entity-only batches.
+
+        Raises:
+            ValueError: If ``batch_size`` is not positive or ``offset``/``limit``
+                is negative.
         """
+        if batch_size < 1:
+            raise ValueError(f"batch_size must be positive, got {batch_size}")
+        if offset < 0:
+            raise ValueError(f"offset must be non-negative, got {offset}")
+        if limit is not None and limit < 0:
+            raise ValueError(f"limit must be non-negative, got {limit}")
 
         def _prepare() -> _PreparedStream:
             nodes, edges = self._frames()
+            node_by_curie = {r["curie"]: r for r in nodes.iter_rows(named=True)}
+            known = list(node_by_curie)
+            edges = edges.filter(
+                pl.col("from").is_in(known) & pl.col("to").is_in(known)
+            )
             if offset:
                 edges = edges.slice(offset)
             if limit is not None:
                 edges = edges.head(limit)
-            node_by_curie = {r["curie"]: r for r in nodes.iter_rows(named=True)}
             names = {c: (r.get("name") or c) for c, r in node_by_curie.items()}
             return edges, node_by_curie, names
 
@@ -203,6 +246,24 @@ class GraphLoader(ABC):
 
             yield await asyncio.to_thread(_batch)
 
+        if offset or limit is not None:
+            return
+        linked = set(edges["from"]) | set(edges["to"])
+        isolated = [c for c in node_by_curie if c not in linked]
+        for start in range(0, len(isolated), batch_size):
+
+            def _isolated(start: int = start) -> KnowledgeGraph:
+                chunk = isolated[start : start + batch_size]
+                return KnowledgeGraph(
+                    entities=[
+                        self._node_row_to_entity(node_by_curie[c]) for c in chunk
+                    ],
+                    relations=[],
+                    graph_schema=self.graph_schema,
+                )
+
+            yield await asyncio.to_thread(_isolated)
+
     async def load_graph(self) -> KnowledgeGraph:
         """Return the whole graph as one ``KnowledgeGraph``.
 
@@ -225,6 +286,7 @@ class GraphLoader(ABC):
             relations = [
                 self._edge_row_to_relation(r, names)
                 for r in edges.iter_rows(named=True)
+                if r["from"] in names and r["to"] in names
             ]
             return KnowledgeGraph(
                 entities=entities,

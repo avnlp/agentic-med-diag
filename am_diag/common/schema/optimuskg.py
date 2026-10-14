@@ -6,10 +6,11 @@ and generates the ``GraphSchema`` used by the released-OptimusKG loader (and, as
 subset, by future per-source subgraph loaders).
 
 The per-edge **semantic** relation (``Relation.type``, e.g. ``EXPRESSED_IN``,
-``TARGET``) lives in the gold ``relation`` property, so the exact set of relation
-types is data-derived. ``SEMANTIC_RELATIONS`` is populated once from the gold
-``edges`` table and committed here; until then each structural label contributes
-a single placeholder type (the structural label with ``-`` replaced by ``_``).
+``TARGET``) lives in the gold ``relation`` column, which the loader maps to
+``type``, so the exact set of relation types is data-derived.
+``SEMANTIC_RELATIONS`` is populated once from the gold ``edges`` table and
+committed here; until then each structural label contributes a single placeholder
+type (the structural label with ``-`` replaced by ``_``).
 Relation types are hints for text2cypher and ``allowed_pairs`` only; they do not
 affect ingestion (``setup_schema`` keys constraints on entity labels), so the
 placeholder is safe.
@@ -84,7 +85,7 @@ STRUCTURAL_LABELS: list[str] = [
 SEMANTIC_RELATIONS: dict[str, list[str]] = {}
 
 # Properties every structured relation may carry (queryable on the edge).
-_RELATION_PROPERTIES = ["relation", "sources", "structural_label"]
+_RELATION_PROPERTIES = ["undirected", "sources", "structural_label"]
 
 
 def _endpoints(structural_label: str) -> tuple[str, str]:

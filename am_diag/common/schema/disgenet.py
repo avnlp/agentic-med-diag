@@ -5,7 +5,7 @@ from __future__ import annotations
 from am_diag.common.data_models.schema import EntityType, GraphSchema, RelationType
 
 
-_PROPERTIES = ["sources", "structural_label", "disgenet_score", "evidence_index"]
+_PROPERTIES = ["sources", "structural_label", "evidence_index"]
 
 DISGENET_SCHEMA = GraphSchema(
     entity_types=[

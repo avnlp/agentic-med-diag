@@ -78,7 +78,7 @@ class Relation(StrEnum):
     CARRIER = "CARRIER"
     OTHER = "OTHER"
     # DrugBank / Open Targets drug-drug.
-    SYNERGISTIC_INTERACTION = "SYNERGISTIC_INTERACTION"
+    DRUG_INTERACTION = "DRUG_INTERACTION"
     # DisGeNET / Open Targets associations.
     ASSOCIATED_WITH = "ASSOCIATED_WITH"
     # Open Targets disease-phenotype.

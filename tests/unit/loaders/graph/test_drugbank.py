@@ -60,7 +60,7 @@ class TestDrugBankLoader:
         assert drug_gene["type"] == "TARGET"
 
         drug_drug = edges.filter(edges["label"] == "DRG-DRG").row(0, named=True)
-        assert drug_drug["type"] == "SYNERGISTIC_INTERACTION"
+        assert drug_drug["type"] == "DRUG_INTERACTION"
         assert {drug_drug["from"], drug_drug["to"]} == {"CHEMBL25", "CHEMBL100"}
         assert drug_drug["interaction_description"] == "bleeding risk"
 

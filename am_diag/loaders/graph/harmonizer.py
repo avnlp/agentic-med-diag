@@ -50,7 +50,6 @@ class Harmonizer:
             .unnest("cross_references")
             .filter(pl.col("source") == "drugbank")
             .explode("ids")
-            .unique("id")
             .select(
                 pl.col("id").alias("chembl_id"),
                 ("DRUGBANK:" + pl.col("ids")).alias("drugbank_id"),
@@ -68,8 +67,11 @@ class Harmonizer:
             .explode("db_xrefs")
             .filter(pl.col("db_xrefs").is_not_null())
             .filter(pl.col("db_xrefs").str.starts_with("UMLS"))
-            .group_by("id")
-            .agg(pl.col("db_xrefs").first().str.replace("UMLS:", "").alias("umls_id"))
+            .select(
+                pl.col("id"),
+                pl.col("db_xrefs").str.replace("UMLS:", "").alias("umls_id"),
+            )
+            .unique()
         )
 
     def to_ensembl(self, df: pl.DataFrame, ncbi_col: str) -> pl.DataFrame:

@@ -66,7 +66,10 @@ class PpiGraphLoader(GraphLoader):
             pl.lit(structural_label(Node.GENE, Node.GENE)).alias("label"),
             pl.lit([Source.PRIMEKG.value]).alias("sources"),
             pl.col("databases"),
-        ).unique(subset=["from", "to"])
+        )
+        edges = edges.group_by(["from", "to", "type", "label", "sources"]).agg(
+            pl.col("databases").explode().unique().sort().alias("databases")
+        )
         gene_curies = (
             pl.concat(
                 [

@@ -252,13 +252,13 @@ selectin = "selectin"
 EHR = "EHR"
 # Medical exam acronym: National Eligibility cum Entrance Test
 NEET = "NEET"
+# Project abbreviation for OpenTargets, not a misspelling
+ot = "ot"
+OT = "OT"
 
 [tool.typos.default.extend-words]
 # Reactome stable-id species prefix (R-HSA- = Homo sapiens), not "HAS"
 HSA = "HSA"
-# "OT"/"ot" is the project abbreviation for OpenTargets, not a misspelling
-ot = "ot"
-OT = "OT"
 
 [tool.bandit]
 exclude_dirs = [

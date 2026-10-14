@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import gzip
 import io
+import re
 import zipfile
 from pathlib import Path
 
@@ -125,6 +126,29 @@ def go_term_namespaces(raw: pl.DataFrame) -> pl.DataFrame:
     )
 
 
+_COPY_ESCAPES = {"b": "\b", "f": "\f", "n": "\n", "r": "\r", "t": "\t", "v": "\v"}
+_COPY_ESCAPE_RE = re.compile(r"\\(.)", re.DOTALL)
+
+
+def _unescape_copy(value: str) -> str:
+    """Decode PostgreSQL ``COPY`` text-format backslash escapes."""
+    if "\\" not in value:
+        return value
+    return _COPY_ESCAPE_RE.sub(
+        lambda m: _COPY_ESCAPES.get(m.group(1), m.group(1)), value
+    )
+
+
+def _is_copy_for(line: str, table: str) -> bool:
+    """Return whether ``line`` is the ``COPY`` header for exactly ``table``."""
+    if not line.startswith("COPY ") or "FROM stdin" not in line:
+        return False
+    name = line[5:].split("(", 1)[0].split(" FROM ", 1)[0].strip()
+    name = name.replace('"', "")
+    wanted = table.replace('"', "")
+    return name == wanted or name.endswith(f".{wanted}")
+
+
 def read_drugbank_interactions_xml(path: str | Path) -> pl.DataFrame:
     """Stream DrugBank ``full database.xml`` into drug-drug interaction rows.
 
@@ -135,7 +159,9 @@ def read_drugbank_interactions_xml(path: str | Path) -> pl.DataFrame:
     """
     rows: list[tuple[str, str, str | None]] = []
     namespace: str | None = None
-    context = etree.iterparse(str(path), events=("end",))
+    context = etree.iterparse(
+        str(path), events=("end",), resolve_entities=False, no_network=True
+    )
     for _, elem in context:
         if namespace is None and elem.nsmap:
             namespace = elem.nsmap.get(None)
@@ -156,6 +182,11 @@ def read_drugbank_interactions_xml(path: str | Path) -> pl.DataFrame:
             first, second = sorted((head, tail))
             rows.append((first, second, desc_el.text if desc_el is not None else None))
         elem.clear()
+        while elem.getprevious() is not None:
+            parent = elem.getparent()
+            if parent is None:
+                break
+            del parent[0]
     return pl.DataFrame(
         rows,
         schema=["tail_drug_id", "head_drug_id", "description"],
@@ -199,7 +230,7 @@ def read_pg_dump_table(
         in_block = False
         for line in handle:
             if not in_block:
-                if line.startswith("COPY ") and table in line and "FROM stdin" in line:
+                if _is_copy_for(line, table):
                     in_block = True
                     if schema is None and "(" in line:
                         inner = line[line.index("(") + 1 : line.index(")")]
@@ -208,5 +239,7 @@ def read_pg_dump_table(
             if line.startswith("\\."):
                 break
             fields = line.rstrip("\n").split("\t")
-            rows.append([None if field == "\\N" else field for field in fields])
+            rows.append(
+                [None if field == "\\N" else _unescape_copy(field) for field in fields]
+            )
     return pl.DataFrame(rows, schema=schema, orient="row")

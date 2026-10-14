@@ -3,7 +3,7 @@
 Fixtures write tiny gold files in both supported layouts (per-type struct files
 and consolidated JSON-property files). Assertions pin the OptimusKG-specific
 mapping: ``id``->``curie``, ``input_label``->PascalCase, ``relation``->``type``,
-``undirected`` dropped, and core-field properties (``description``, ``score``,
+``undirected`` kept, and core-field properties (``description``, ``score``,
 ``sources``) mapped through the seam rather than colliding.
 """
 
@@ -39,6 +39,13 @@ def _write_per_type_gold(root: Path) -> None:
             ],
         }
     ).write_parquet(root / "nodes" / "drug.parquet")
+    pl.DataFrame(
+        {
+            "id": ["MONDO:1"],
+            "label": ["DIS"],
+            "properties": [{"name": "disease one"}],
+        }
+    ).write_parquet(root / "nodes" / "disease.parquet")
     pl.DataFrame(
         {
             "from": ["CHEMBL25"],
@@ -88,14 +95,14 @@ class TestOptimusKGLoaderPerType:
         assert "description" not in drug.schema_properties
 
     async def test_edge_relation_and_structural_label(self, tmp_path) -> None:
-        """``relation`` becomes type; structural label retained; undirected dropped."""
+        """``relation`` becomes type; structural label retained; undirected kept."""
         _write_per_type_gold(tmp_path)
         kg = await OptimusKGGraphLoader(tmp_path).load_graph()
         rel = next(r for r in kg.relations if r.type == "TARGET")
         assert rel.structural_label == "DRG-GEN"
         assert rel.head_id == curie_to_entity_id("CHEMBL25")
         assert rel.sources == ["drugbank"]
-        assert "undirected" not in rel.schema_properties
+        assert rel.schema_properties["undirected"] is False
         assert rel.schema_properties.get("mechanisms_of_action") == "inhibitor"
 
     async def test_edge_score_maps_to_core_field(self, tmp_path) -> None:
@@ -114,9 +121,12 @@ class TestOptimusKGLoaderConsolidated:
         """JSON-string properties in consolidated files flatten the same way."""
         pl.DataFrame(
             {
-                "id": ["ENSG1"],
-                "label": ["GEN"],
-                "properties": [json.dumps({"name": "BRCA1", "biotype": "pc"})],
+                "id": ["ENSG1", "CHEMBL25"],
+                "label": ["GEN", "DRG"],
+                "properties": [
+                    json.dumps({"name": "BRCA1", "biotype": "pc"}),
+                    json.dumps({"name": "aspirin"}),
+                ],
             }
         ).write_parquet(tmp_path / "nodes.parquet")
         pl.DataFrame(

@@ -37,8 +37,8 @@ DRUGBANK_SCHEMA = GraphSchema(
     ]
     + [
         RelationType(
-            type="SYNERGISTIC_INTERACTION",
-            glirel_label="SYNERGISTIC_INTERACTION",
+            type="DRUG_INTERACTION",
+            glirel_label="DRUG_INTERACTION",
             head_labels=["Drug"],
             tail_labels=["Drug"],
             properties=_DRG_DRG,

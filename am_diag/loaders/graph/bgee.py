@@ -25,6 +25,17 @@ from am_diag.loaders.graph.vocab import (
 )
 
 
+_COLUMNS = [
+    "Gene ID",
+    "Gene name",
+    "Anatomical entity ID",
+    "Anatomical entity name",
+    "Expression",
+    "Call quality",
+    "Expression rank",
+]
+
+
 class BgeeGraphLoader(GraphLoader):
     """Build the Bgee ANA-GEN expression subgraph. License: CC0."""
 
@@ -43,6 +54,7 @@ class BgeeGraphLoader(GraphLoader):
                 self._dir / "Homo_sapiens_expr_advanced.tsv.gz",
                 separator="\t",
                 infer_schema_length=0,
+                columns=_COLUMNS,
             )
             .filter(pl.col("Anatomical entity ID").str.starts_with("UBERON"))
             .select(
@@ -67,7 +79,7 @@ class BgeeGraphLoader(GraphLoader):
                 .alias("type"),
                 pl.lit(structural_label(Node.ANATOMY, Node.GENE)).alias("label"),
                 pl.lit([Source.BGEE.value]).alias("sources"),
-                pl.col("expression_rank").cast(pl.Float64).cast(pl.Int32),
+                pl.col("expression_rank").cast(pl.Float64),
             )
             .select(
                 "from",

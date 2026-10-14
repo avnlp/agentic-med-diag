@@ -120,16 +120,22 @@ class DrugBankGraphLoader(GraphLoader):
 
     def _drug_drug_edges(self) -> pl.DataFrame:
         raw = read_drugbank_interactions_xml(self._dir / "full database.xml")
-        mapped = (
-            self._harmonizer.to_chembl(raw, "head_drug_id")
-            .rename({"chembl_id": "head_chembl"})
-            .pipe(self._harmonizer.to_chembl, "tail_drug_id")
-            .rename({"chembl_id": "tail_chembl"})
+        xref = self._harmonizer.chembl_drugbank
+        mapped = raw.join(
+            xref.rename({"chembl_id": "head_chembl"}),
+            left_on="head_drug_id",
+            right_on="drugbank_id",
+            how="left",
+        ).join(
+            xref.rename({"chembl_id": "tail_chembl"}),
+            left_on="tail_drug_id",
+            right_on="drugbank_id",
+            how="left",
         )
         return mapped.select(
-            pl.col("head_chembl").alias("from"),
-            pl.col("tail_chembl").alias("to"),
-            pl.lit(Relation.SYNERGISTIC_INTERACTION.value).alias("type"),
+            pl.coalesce("head_chembl", "head_drug_id").alias("from"),
+            pl.coalesce("tail_chembl", "tail_drug_id").alias("to"),
+            pl.lit(Relation.DRUG_INTERACTION.value).alias("type"),
             pl.lit(structural_label(Node.DRUG, Node.DRUG)).alias("label"),
             pl.lit([Source.DRUG_BANK.value]).alias("sources"),
             pl.col("description").alias("interaction_description"),

@@ -57,7 +57,7 @@ class DisGeNETGraphLoader(GraphLoader):
             pl.col("diseaseId").alias("umls_id"),
             pl.col("diseaseName").alias("disease_name"),
             pl.col("diseaseType").alias("disease_type"),
-            pl.col("score").cast(pl.Float64, strict=False).alias("disgenet_score"),
+            pl.col("score").cast(pl.Float64, strict=False).alias("score"),
             pl.col("EI").cast(pl.Float64, strict=False).alias("evidence_index"),
         )
         target = self._ref.opentargets_target.select(
@@ -86,7 +86,7 @@ class DisGeNETGraphLoader(GraphLoader):
                 "type",
                 "label",
                 "sources",
-                "disgenet_score",
+                "score",
                 "evidence_index",
             )
             .unique(subset=["from", "to"])

@@ -111,10 +111,8 @@ class OptimusKGGraphLoader(GraphLoader):
 
     @staticmethod
     def _map_edges(df: pl.DataFrame) -> pl.DataFrame:
-        """Map ``relation``->``type`` and drop the ``undirected`` flag."""
+        """Map ``relation``->``type``, keeping the ``undirected`` flag."""
         out = df
         if "relation" in out.columns:
             out = out.rename({"relation": "type"})
-        if "undirected" in out.columns:
-            out = out.drop("undirected")
         return out

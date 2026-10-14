@@ -24,7 +24,7 @@ GENE_ONTOLOGY_SCHEMA = GraphSchema(
     relation_types=[
         RelationType(
             type="PARENT",
-            glirel_label="PARENT",
+            glirel_label=f"{label.removeprefix('Go').upper()}_PARENT",
             head_labels=[label],
             tail_labels=[label],
             properties=["sources", "structural_label"],

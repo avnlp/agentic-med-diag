@@ -55,13 +55,18 @@ _ENTITY_TYPES = [
 ]
 
 
-def _relation(rtype: str, heads: list[str], tails: list[str]) -> RelationType:
+def _relation(
+    rtype: str,
+    heads: list[str],
+    tails: list[str],
+    extra_properties: tuple[str, ...] = (),
+) -> RelationType:
     return RelationType(
         type=rtype,
         glirel_label=rtype,
         head_labels=heads,
         tail_labels=tails,
-        properties=["sources", "structural_label"],
+        properties=["sources", "structural_label", *extra_properties],
     )
 
 
@@ -76,7 +81,12 @@ OPEN_TARGETS_SCHEMA = GraphSchema(
         for label, description in _ENTITY_TYPES
     ],
     relation_types=[
-        _relation("ASSOCIATED_WITH", _GENE_ASSOCIATION_HEADS, ["Gene"]),
+        _relation(
+            "ASSOCIATED_WITH",
+            _GENE_ASSOCIATION_HEADS,
+            ["Gene"],
+            ("evidence_score", "evidence_count"),
+        ),
         _relation("PARENT", ["Disease"], ["Disease"]),
         _relation("HAS_PHENOTYPE", ["Disease"], ["Phenotype"]),
         _relation("INDICATION", ["Drug"], ["Disease"]),
