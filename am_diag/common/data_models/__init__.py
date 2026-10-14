@@ -30,6 +30,7 @@ from am_diag.common.data_models.chunk import Chunk
 from am_diag.common.data_models.cluster import ItemCluster, ResolvedAliasMap
 from am_diag.common.data_models.community import Community
 from am_diag.common.data_models.community_report import CommunityReport, Finding
+from am_diag.common.data_models.connection import GraphConnection, VectorConnection
 from am_diag.common.data_models.document import Document
 from am_diag.common.data_models.entity import Entity
 from am_diag.common.data_models.enums import Distance, ExtractorName
@@ -38,6 +39,13 @@ from am_diag.common.data_models.evaluation import (
     MCQAccuracyResult,
     MetricResult,
     SampleEvaluationResult,
+)
+from am_diag.common.data_models.graph_record import GraphRecord
+from am_diag.common.data_models.job import (
+    JobConfig,
+    JobItem,
+    JobProgress,
+    JobRecord,
 )
 from am_diag.common.data_models.knowledge_graph import KnowledgeGraph
 from am_diag.common.data_models.mcq import ExtractedMCQ, MCQSample
@@ -82,8 +90,14 @@ __all__ = [
     "ExtractorName",
     "FinalEvent",
     "Finding",
+    "GraphConnection",
+    "GraphRecord",
     "GraphSchema",
     "ItemCluster",
+    "JobConfig",
+    "JobItem",
+    "JobProgress",
+    "JobRecord",
     "KnowledgeGraph",
     "LLMContext",
     "MCQAccuracyResult",
@@ -108,6 +122,7 @@ __all__ = [
     "SufficientContext",
     "TokenEvent",
     "ToolCallEvent",
+    "VectorConnection",
     "VectorHit",
     "VectorRecord",
     "VerifierEvent",
