@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import sqlite3
 
+import pytest
+
 from am_diag.ingestion.cache import CacheManager, IngestionCache
 
 
@@ -70,15 +72,47 @@ class TestCacheRoundTrips:
 class TestCachePragmas:
     """Tests for the database-level WAL pragma."""
 
-    def test_wal_mode_enabled(self, tmp_path):
-        """Verify the cache database is created in WAL journal mode."""
-        IngestionCache(tmp_path / "g.db")
+    async def test_wal_mode_enabled(self, tmp_path):
+        """Verify the cache database is created in WAL journal mode on first use."""
+        await IngestionCache(tmp_path / "g.db").get_answer("k")
         conn = sqlite3.connect(tmp_path / "g.db")
         try:
             mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
         finally:
             conn.close()
         assert mode.lower() == "wal"
+
+
+class TestCacheResilience:
+    """Tests that cache contention degrades to a miss instead of an error."""
+
+    async def test_locked_database_reads_miss_and_skips_writes(
+        self, tmp_path, monkeypatch
+    ):
+        """Verify a write-locked database neither raises nor returns stale data."""
+        monkeypatch.setattr("am_diag.ingestion.cache._BUSY_TIMEOUT_MS", 50)
+        cache = IngestionCache(tmp_path / "g.db")
+        await cache.put_answer("seed", {"answer": "kept"})
+        blocker = sqlite3.connect(tmp_path / "g.db")
+        try:
+            blocker.execute("BEGIN IMMEDIATE")
+            await cache.put_answer("q", {"answer": "lost"})
+            await cache.put_embeddings([("e", [1.0])])
+            assert await cache.get_answer("seed") == {"answer": "kept"}
+        finally:
+            blocker.rollback()
+            blocker.close()
+        assert await cache.get_answer("q") is None
+        assert await cache.get_embeddings(["e"]) == {}
+
+    async def test_embedding_lookup_handles_more_keys_than_sqlite_allows(
+        self, tmp_path
+    ):
+        """Verify a lookup larger than one IN-clause batch returns every hit."""
+        cache = IngestionCache(tmp_path / "g.db")
+        keys = [f"k{i}" for i in range(2500)]
+        await cache.put_embeddings([(key, [1.0]) for key in keys])
+        assert len(await cache.get_embeddings(keys)) == 2500
 
 
 class TestCacheManager:
@@ -96,3 +130,9 @@ class TestCacheManager:
         """Verify the same graph id returns the same cache instance."""
         manager = CacheManager(tmp_path)
         assert manager.for_graph("med") is manager.for_graph("med")
+
+    @pytest.mark.parametrize("graph_id", ["../escape", "a/b", "", "..", ".hidden"])
+    def test_for_graph_rejects_ids_that_leave_the_cache_dir(self, tmp_path, graph_id):
+        """Verify graph ids with path components are refused."""
+        with pytest.raises(ValueError, match="Invalid graph id"):
+            CacheManager(tmp_path).for_graph(graph_id)

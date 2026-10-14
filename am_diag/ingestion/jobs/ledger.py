@@ -9,6 +9,9 @@ mature ingestion libraries compose durable state rather than subclassing.
 
 from __future__ import annotations
 
+import os
+import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -35,6 +38,20 @@ def _compute_progress(items: dict[str, JobItem]) -> JobProgress:
     return progress
 
 
+def _write_atomic(path: Path, text: str) -> None:
+    """Write ``text`` to ``path`` so readers never see a partial file."""
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_name, path)
+    except BaseException:
+        Path(tmp_name).unlink(missing_ok=True)
+        raise
+
+
 class JobLedger:
     """Durable record of a job's items and status.
 
@@ -45,10 +62,20 @@ class JobLedger:
     """
 
     def __init__(self, record: JobRecord, *, state_dir: Path) -> None:
-        """Bind the ledger to a record and load persisted items, if any."""
+        """Bind the ledger to a record and load persisted state, if any."""
         self._record = record
         self._dir = state_dir / "jobs" / record.job_id
+        self._restore_finalization()
         self._items: dict[str, JobItem] = self._load()
+
+    def _restore_finalization(self) -> None:
+        """Carry the persisted finalization state onto a re-created record."""
+        manifest = self._dir / "manifest.json"
+        if not manifest.exists():
+            return
+        persisted = JobRecord.model_validate_json(manifest.read_text("utf-8"))
+        self._record.finalize = self._record.finalize or persisted.finalize
+        self._record.finalized = self._record.finalized or persisted.finalized
 
     def _load(self) -> dict[str, JobItem]:
         """Load persisted item state from ``items.jsonl``, if present."""
@@ -111,14 +138,15 @@ class JobLedger:
         self.persist()
 
     def persist(self) -> None:
-        """Recount progress and rewrite the manifest + items file."""
+        """Recount progress and atomically rewrite the manifest + items file."""
         self._record.progress = _compute_progress(self._items)
+        self._record.updated_at = datetime.now(timezone.utc)
         self._dir.mkdir(parents=True, exist_ok=True)
-        (self._dir / "manifest.json").write_text(
-            self._record.model_dump_json(indent=2), "utf-8"
-        )
         lines = [
             item.model_dump_json()
             for item in sorted(self._items.values(), key=lambda i: i.sequence_index)
         ]
-        (self._dir / "items.jsonl").write_text("\n".join(lines), "utf-8")
+        _write_atomic(self._dir / "items.jsonl", "\n".join(lines))
+        _write_atomic(
+            self._dir / "manifest.json", self._record.model_dump_json(indent=2)
+        )

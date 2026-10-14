@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import Any
 
 from am_diag.common.data_models.job import JobItem, JobProgress, JobRecord
 from am_diag.ingestion.cache import IngestionCache
@@ -94,17 +95,25 @@ class QAJob:
 
     def _answer_key(self, question: str) -> str:
         """Return the content-addressed answer cache key for a question."""
+        record = self._ledger.record
         return IngestionCache.answer_key(
-            question, self._ledger.record.project_id or "", self._agent_config_hash
+            question,
+            record.project_id or "",
+            self._agent_config_hash,
+            graphs=record.graphs,
         )
 
     async def _answer_one(
         self, question: str, index: int, sem: asyncio.Semaphore
     ) -> None:
-        """Answer one question (or serve the cache), isolating any failure."""
+        """Answer one question (or serve the cache), isolating any failure.
+
+        The ledger is persisted as soon as the question settles, so a crash loses
+        at most the answers still in flight.
+        """
         key = self._answer_key(question)
         existing = self._ledger.get(key)
-        if existing and existing.status == "succeeded":
+        if existing and existing.status in ("succeeded", "skipped"):
             existing.status = "skipped"
             return
         item = self._ledger.add(
@@ -116,16 +125,28 @@ class QAJob:
             )
         )
         async with sem:
+            item.status = "processing"
             try:
                 answer = await self._cache.get_answer(key)
                 if answer is None:
-                    result = await self._answerer.answer(
-                        question, graphs=self._ledger.record.graphs
-                    )
-                    answer = result.model_dump()
+                    answer = await self._answer_with_retries(question)
                     await self._cache.put_answer(key, answer)
                 item.status = "succeeded"
                 item.output = answer
+                item.error = None
             except Exception as exc:  # noqa: BLE001
                 item.status = "failed"
                 item.error = {"type": type(exc).__name__, "message": str(exc)}
+        self._ledger.persist()
+
+    async def _answer_with_retries(self, question: str) -> dict[str, Any]:
+        """Ask the answerer, making up to ``max_retries`` attempts in total."""
+        graphs = self._ledger.record.graphs
+        for _ in range(self._ledger.record.config.max_retries - 1):
+            try:
+                return (
+                    await self._answerer.answer(question, graphs=graphs)
+                ).model_dump()
+            except Exception:  # noqa: BLE001, S112
+                continue
+        return (await self._answerer.answer(question, graphs=graphs)).model_dump()

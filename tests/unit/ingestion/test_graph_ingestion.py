@@ -30,6 +30,26 @@ class TestFinalizeGraph:
         count = await gi.finalize_graph(graph_store)
 
         assert count == 1
+        detector.detect_all.assert_awaited_once()
         graph_store.upsert_communities.assert_awaited_once_with(communities)
         graph_store.link_in_community.assert_awaited_once_with(communities)
         graph_store.link_parent_community.assert_awaited_once_with(communities)
+
+    async def test_replaces_prior_communities_before_upserting(
+        self, monkeypatch
+    ) -> None:
+        """Old Community nodes are deleted after detection and before the upsert."""
+        calls: list[str] = []
+        graph_store = AsyncMock()
+        graph_store.execute_query.side_effect = lambda *_a, **_k: calls.append("delete")
+        graph_store.upsert_communities.side_effect = lambda *_a: calls.append("upsert")
+        detector = AsyncMock()
+        detector.detect_all = AsyncMock(return_value=[Community(community_id="0:1")])
+        monkeypatch.setattr(
+            "am_diag.graph_construction.community.gds.GdsCommunityDetector",
+            lambda graph, config: detector,
+        )
+
+        await gi.finalize_graph(graph_store)
+
+        assert calls == ["delete", "upsert"]

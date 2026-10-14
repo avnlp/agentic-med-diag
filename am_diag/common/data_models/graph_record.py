@@ -8,12 +8,22 @@ from pydantic import BaseModel, Field
 
 from am_diag.common.data_models.connection import GraphConnection, VectorConnection
 from am_diag.common.data_models.schema import GraphSchema
-from am_diag.common.schema import MEDICAL_GRAPHRAG_SCHEMA
 
 
 def _utcnow() -> datetime:
     """Return the current UTC time as a timezone-aware datetime."""
     return datetime.now(timezone.utc)
+
+
+def _default_schema() -> GraphSchema:
+    """Return a private copy of the bundled medical schema.
+
+    The bundled schemas are imported on first use so that importing the data
+    models does not load every schema module.
+    """
+    from am_diag.common.schema import MEDICAL_GRAPHRAG_SCHEMA  # noqa: PLC0415
+
+    return MEDICAL_GRAPHRAG_SCHEMA.model_copy(deep=True)
 
 
 class GraphRecord(BaseModel):
@@ -41,7 +51,7 @@ class GraphRecord(BaseModel):
     description: str | None = None
     neo4j: GraphConnection
     vector: VectorConnection
-    graph_schema: GraphSchema = Field(default_factory=lambda: MEDICAL_GRAPHRAG_SCHEMA)
+    graph_schema: GraphSchema = Field(default_factory=_default_schema)
     owner_id: str | None = None
     created_at: datetime = Field(default_factory=_utcnow)
     updated_at: datetime = Field(default_factory=_utcnow)

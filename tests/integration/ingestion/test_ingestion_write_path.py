@@ -33,12 +33,6 @@ from am_diag.ingestion.jobs import IngestionJob
 
 
 _EMBED_DIM = 8
-_COLLECTIONS = {
-    "entity": "test_wp_entity",
-    "relation": "test_wp_relation",
-    "chunk": "test_wp_chunk",
-    "community": "test_wp_community",
-}
 
 
 class _FixedEmbedder:
@@ -143,13 +137,19 @@ async def target():
     configured database.
     """
     run_id = uuid4().hex[:8]
+    collections = {
+        "entity": f"test_wp_entity_{run_id}",
+        "relation": f"test_wp_relation_{run_id}",
+        "chunk": f"test_wp_chunk_{run_id}",
+        "community": f"test_wp_community_{run_id}",
+    }
     graph_store = create_neo4j_client()
     vector_store = create_qdrant_store()
     await _remove_run_data(graph_store, run_id)
     for name in (
-        _COLLECTIONS["entity"],
-        _COLLECTIONS["relation"],
-        _COLLECTIONS["chunk"],
+        collections["entity"],
+        collections["relation"],
+        collections["chunk"],
     ):
         await vector_store.ensure_collection(name, _EMBED_DIM)
     yield SimpleNamespace(
@@ -160,18 +160,19 @@ async def target():
             (f"metformin {run_id}", "Drug"),
         ],
         schema=MEDICAL_GRAPHRAG_SCHEMA,
-        collections=_COLLECTIONS,
+        collections=collections,
         graph_store=graph_store,
         vector_store=vector_store,
         embedder=_FixedEmbedder(),
     )
     await _remove_run_data(graph_store, run_id)
     for name in (
-        _COLLECTIONS["entity"],
-        _COLLECTIONS["relation"],
-        _COLLECTIONS["chunk"],
+        collections["entity"],
+        collections["relation"],
+        collections["chunk"],
     ):
         await vector_store.delete_collection(name)
+    await vector_store.close()
     await graph_store.close()
 
 

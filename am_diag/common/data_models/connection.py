@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 CollectionKind = Literal["entity", "relation", "chunk", "community"]
@@ -53,7 +53,7 @@ class VectorConnection(BaseModel):
         api_key_env: Env var holding the API key. ``None`` when the backend
             needs no key; an empty-string env value is also accepted.
         collections: Logical-to-physical collection names for this graph's four
-            vector spaces. Defaults to the per-kind names.
+            vector spaces. Kinds that are not given use the per-kind default.
         embedding_model: Model id used to build these vectors. Recorded so a
             query embeds with the matching model. Defaults to the ST default.
         dim: Embedding dimensionality.
@@ -67,3 +67,10 @@ class VectorConnection(BaseModel):
     )
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     dim: int = 384
+
+    @field_validator("collections")
+    @classmethod
+    def _fill_default_collections(
+        cls, value: dict[CollectionKind, str]
+    ) -> dict[CollectionKind, str]:
+        return {**_default_collections(), **value}

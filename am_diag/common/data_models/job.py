@@ -7,20 +7,35 @@ this module holds only the pure, serializable records they read and write.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 JobKind = Literal["ingestion", "qa"]
 JobStatus = Literal["draft", "running", "succeeded", "partial", "failed", "canceled"]
 ItemStatus = Literal["pending", "processing", "succeeded", "failed", "skipped"]
 
+_JOB_ID_RE = re.compile(r"[A-Za-z0-9_-]+")
+
 
 def _utcnow() -> datetime:
     """Return the current UTC time as a timezone-aware datetime."""
     return datetime.now(timezone.utc)
+
+
+def validate_job_id(job_id: str) -> str:
+    """Return ``job_id`` if it is a single safe path component.
+
+    Raises:
+        ValueError: If the id is empty or contains anything but letters, digits,
+            ``_`` and ``-`` (so it cannot escape the jobs directory).
+    """
+    if not _JOB_ID_RE.fullmatch(job_id):
+        raise ValueError(f"Invalid job id {job_id!r}: use letters, digits, _ and -")
+    return job_id
 
 
 class JobProgress(BaseModel):
@@ -79,19 +94,17 @@ class JobConfig(BaseModel):
         extract_concurrency: Max concurrent extraction calls.
         embed_batch_size: Number of texts embedded per batch.
         write_batch_size: Number of chunks written per UNWIND batch.
-        max_retries: Per-item retry budget before marking it failed.
-        fallback_model: Optional alternate model id used after retries.
+        max_retries: Per-item attempt budget before marking it failed (at least 1).
         embedding_scope: Which node kinds to embed during ingestion.
         answer_concurrency: Max concurrent agent answers in a QA job.
     """
 
-    extract_concurrency: int = 8
-    embed_batch_size: int = 256
-    write_batch_size: int = 5000
-    max_retries: int = 3
-    fallback_model: str | None = None
+    extract_concurrency: int = Field(default=8, ge=1)
+    embed_batch_size: int = Field(default=256, ge=1)
+    write_batch_size: int = Field(default=5000, ge=1)
+    max_retries: int = Field(default=3, ge=1)
     embedding_scope: Literal["entities", "entities+relations"] = "entities+relations"
-    answer_concurrency: int = 4
+    answer_concurrency: int = Field(default=4, ge=1)
 
 
 class JobRecord(BaseModel):
@@ -105,11 +118,17 @@ class JobRecord(BaseModel):
         graph_id: Target graph (ingestion jobs).
         project_id: Target project (QA jobs).
         graphs: Federation subset for a QA job.
+        finalize: Whether an ingestion job must finalize communities.
+        finalized: Whether finalization has completed.
         config: Execution parameters.
         status: Overall job status.
         progress: Aggregate item counters.
         created_at: ISO timestamp of creation.
         updated_at: ISO timestamp of last update.
+
+    Raises:
+        ValueError: If ``job_id`` is not a safe path component, an ingestion job
+            has no ``graph_id``, or a QA job has no ``project_id``.
     """
 
     job_id: str
@@ -117,8 +136,23 @@ class JobRecord(BaseModel):
     graph_id: str | None = None
     project_id: str | None = None
     graphs: list[str] | None = None
+    finalize: bool = False
+    finalized: bool = False
     config: JobConfig = Field(default_factory=JobConfig)
     status: JobStatus = "draft"
     progress: JobProgress = Field(default_factory=JobProgress)
     created_at: datetime = Field(default_factory=_utcnow)
     updated_at: datetime = Field(default_factory=_utcnow)
+
+    @field_validator("job_id")
+    @classmethod
+    def _check_job_id(cls, value: str) -> str:
+        return validate_job_id(value)
+
+    @model_validator(mode="after")
+    def _check_target(self) -> JobRecord:
+        if self.kind == "ingestion" and not self.graph_id:
+            raise ValueError("Ingestion jobs require a graph_id")
+        if self.kind == "qa" and not self.project_id:
+            raise ValueError("QA jobs require a project_id")
+        return self

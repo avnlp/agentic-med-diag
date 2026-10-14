@@ -12,12 +12,15 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
+import pytest
+
 from am_diag.common.data_models.chunk import Chunk
 from am_diag.common.data_models.connection import GraphConnection, VectorConnection
 from am_diag.common.data_models.document import Document
 from am_diag.common.data_models.entity import Entity
 from am_diag.common.data_models.graph_record import GraphRecord
-from am_diag.common.data_models.job import JobRecord
+from am_diag.common.data_models.job import JobConfig, JobRecord
+from am_diag.common.data_models.provenance import Provenance
 from am_diag.ingestion.cache import IngestionCache
 from am_diag.ingestion.jobs import IngestionJob
 
@@ -98,15 +101,16 @@ def _docs(n: int) -> list[Document]:
     ]
 
 
-def _make_job(tmp_path, target, cache, sources, extractor):
+def _make_job(tmp_path, target, cache, sources, extractor, record=None, **kwargs):
     return IngestionJob(
-        JobRecord(job_id=uuid4().hex, kind="ingestion", graph_id="med"),
+        record or JobRecord(job_id=uuid4().hex, kind="ingestion", graph_id="med"),
         target=target,
         cache=cache,
         state_dir=tmp_path,
         sources=sources,
         extractor=extractor,
         chunker=_FakeChunker(),
+        **kwargs,
     )
 
 
@@ -201,3 +205,146 @@ class TestIngestionRun:
         assert record.status == "succeeded"
         assert record.progress.skipped == 2
         assert extractor.calls == 2
+
+    async def test_resume_from_persisted_state_in_new_job(self, tmp_path):
+        """Verify a job rebuilt from disk skips chunks that succeeded earlier."""
+
+        async def fn(chunk):
+            return [Entity(name=chunk.text, label="Disease")], []
+
+        extractor = _FakeExtractor(fn)
+        cache = IngestionCache(tmp_path / "med.db")
+        record = JobRecord(job_id=uuid4().hex, kind="ingestion", graph_id="med")
+        docs = _docs(2)
+        await _make_job(
+            tmp_path, _target(), cache, [_FakeCorpusSource(docs)], extractor, record
+        ).run()
+        rebuilt = _make_job(
+            tmp_path,
+            _target(),
+            cache,
+            [_FakeCorpusSource(docs)],
+            extractor,
+            record.model_copy(deep=True),
+        )
+        result = await rebuilt.resume()
+        assert result.progress.skipped == 2
+        assert extractor.calls == 2
+
+
+class TestChunkIdentity:
+    """Tests for ledger ids, cache keys, and provenance of reused extractions."""
+
+    async def test_distinct_chunks_with_same_text_are_all_processed(self, tmp_path):
+        """Verify identical text in two documents yields two ledger items."""
+
+        async def fn(chunk):
+            return [Entity(name="shared", label="Disease")], []
+
+        docs = [
+            Document(text="same", source="inline", external_id="1"),
+            Document(text="same", source="inline", external_id="2"),
+        ]
+        cache = IngestionCache(tmp_path / "med.db")
+        job = _make_job(
+            tmp_path, _target(), cache, [_FakeCorpusSource(docs)], _FakeExtractor(fn)
+        )
+        record = await job.run()
+        assert record.progress.total == 2
+        assert record.progress.succeeded == 2
+
+    async def test_cached_extraction_is_rebound_to_the_current_chunk(self, tmp_path):
+        """Verify a cache hit carries the new chunk's id, not the original's."""
+
+        async def fn(chunk):
+            entity = Entity(
+                name="shared",
+                label="Disease",
+                provenance=Provenance(chunk_ids=[chunk.id]),
+            )
+            return [entity], []
+
+        docs = [
+            Document(text="same", source="inline", external_id="1"),
+            Document(text="same", source="inline", external_id="2"),
+        ]
+        cache = IngestionCache(tmp_path / "med.db")
+        first = _target()
+        await _make_job(
+            tmp_path, first, cache, [_FakeCorpusSource(docs[:1])], _FakeExtractor(fn)
+        ).run()
+        second = _target()
+        extractor = _FakeExtractor(fn)
+        await _make_job(
+            tmp_path, second, cache, [_FakeCorpusSource(docs[1:])], extractor
+        ).run()
+        kg = second.graph_store.write_knowledge_graph.await_args.args[0]
+        assert extractor.calls == 0
+        assert kg.entities[0].provenance.chunk_ids == [kg.chunks[0].id]
+
+    async def test_embedding_calls_respect_batch_size(self, tmp_path):
+        """Verify embedding requests are split by embed_batch_size."""
+
+        async def fn(chunk):
+            return [Entity(name=chunk.text, label="Disease")], []
+
+        target = _target()
+        record = JobRecord(
+            job_id=uuid4().hex,
+            kind="ingestion",
+            graph_id="med",
+            config=JobConfig(embed_batch_size=2),
+        )
+        await _make_job(
+            tmp_path,
+            target,
+            IngestionCache(tmp_path / "med.db"),
+            [_FakeCorpusSource(_docs(5))],
+            _FakeExtractor(fn),
+            record,
+        ).run()
+        sizes = [len(call.args[0]) for call in target.embedder.embed.await_args_list]
+        assert sizes
+        assert max(sizes) <= 2
+
+
+class TestFinalizationResume:
+    """Tests that requested finalization survives an interrupted run."""
+
+    async def test_resume_retries_unfinished_finalization(self, tmp_path, monkeypatch):
+        """Verify a failed finalize is retried on resume and then not repeated."""
+
+        async def fn(chunk):
+            return [Entity(name=chunk.text, label="Disease")], []
+
+        finalize = AsyncMock(side_effect=[RuntimeError("gds down"), 3, 3])
+        monkeypatch.setattr(
+            "am_diag.ingestion.jobs.ingestion_job.finalize_graph", finalize
+        )
+        cache = IngestionCache(tmp_path / "med.db")
+        record = JobRecord(job_id=uuid4().hex, kind="ingestion", graph_id="med")
+        docs = _docs(1)
+        job = _make_job(
+            tmp_path,
+            _target(),
+            cache,
+            [_FakeCorpusSource(docs)],
+            _FakeExtractor(fn),
+            record,
+        )
+        with pytest.raises(RuntimeError):
+            await job.run(finalize=True)
+
+        rebuilt = _make_job(
+            tmp_path,
+            _target(),
+            cache,
+            [_FakeCorpusSource(docs)],
+            _FakeExtractor(fn),
+            JobRecord(job_id=record.job_id, kind="ingestion", graph_id="med"),
+        )
+        result = await rebuilt.resume()
+        await rebuilt.resume()
+
+        assert result.finalized is True
+        assert finalize.await_count == 2

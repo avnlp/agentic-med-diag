@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from am_diag.common.data_models.job import JobRecord
+from am_diag.common.data_models.job import JobRecord, validate_job_id
 
 
 if TYPE_CHECKING:
@@ -51,8 +51,10 @@ class JobManager:
         """Return one job manifest.
 
         Raises:
+            ValueError: If ``job_id`` is not a single safe path component.
             FileNotFoundError: If no manifest exists for ``job_id``.
         """
+        validate_job_id(job_id)
         live = self._live_jobs.get(job_id)
         if live is not None:
             return live.record

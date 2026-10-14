@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from am_diag.common.cypher import load
 from am_diag.db.graph.base import GraphStore
 
 
@@ -20,6 +21,9 @@ logger = logging.getLogger(__name__)
 
 async def finalize_graph(graph_store: GraphStore, config: Any | None = None) -> int:
     """Run community detection once over the whole persisted graph; persist + link.
+
+    Communities from an earlier finalization are replaced, so re-running never
+    leaves duplicate nodes or stale links.
 
     Detection only: community **report** generation (LLM summarization) is deferred
     to a later slice because it is one LLM call per community over a graph that can
@@ -39,6 +43,7 @@ async def finalize_graph(graph_store: GraphStore, config: Any | None = None) -> 
 
     detector = GdsCommunityDetector(graph_store, config)
     communities = await detector.detect_all()
+    await graph_store.execute_query(load("community/delete_communities"))
     await graph_store.upsert_communities(communities)
     await graph_store.link_in_community(communities)
     await graph_store.link_parent_community(communities)

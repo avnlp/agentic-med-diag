@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -31,15 +32,49 @@ from am_diag.loaders.graph.base import GraphLoader
 
 logger = logging.getLogger(__name__)
 
-_EXTRACTOR_MODEL_ID = "gliner-glirel-v1"
-
 
 def _schema_version(graph_schema: Any) -> str:
-    """Return a short stable hash of a schema's type names."""
-    names = sorted(graph_schema.entity_type_names()) + sorted(
-        graph_schema.relation_type_names()
-    )
-    return hashlib.sha256("\x00".join(names).encode("utf-8")).hexdigest()[:16]
+    """Return a short stable hash of the extraction-relevant schema definitions."""
+    definition = {
+        "entities": sorted(
+            (
+                {
+                    "label": et.label,
+                    "gliner_label": et.gliner_label,
+                    "description": et.description,
+                    "key_property": et.key_property,
+                }
+                for et in graph_schema.entity_types
+            ),
+            key=lambda d: d["label"],
+        ),
+        "relations": sorted(
+            (
+                {
+                    "type": rt.type,
+                    "glirel_label": rt.glirel_label,
+                    "head_labels": sorted(rt.head_labels),
+                    "tail_labels": sorted(rt.tail_labels),
+                    "properties": sorted(rt.properties),
+                }
+                for rt in graph_schema.relation_types
+            ),
+            key=lambda d: d["type"],
+        ),
+    }
+    payload = json.dumps(definition, sort_keys=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def _rebind_provenance(chunk: Chunk, points: list[Entity] | list[Relation]) -> None:
+    """Point cached extraction results at the chunk they are reused for."""
+    for point in points:
+        provenance = point.provenance
+        if provenance is None:
+            continue
+        provenance.chunk_ids = [chunk.id]
+        if provenance.chunk_texts:
+            provenance.chunk_texts = [chunk.text]
 
 
 def _source_kind(source: Any) -> str:
@@ -69,6 +104,8 @@ class IngestionJob:
         sources: Loaders or inline sources to ingest.
         extractor: Optional injected ``Extractor`` (testing). When ``None``, a
             ``ComposedExtractor`` is built lazily on first use.
+        extractor_config: Optional ``ExtractionPipelineConfig`` for the lazily
+            built extractor. Its values version the extraction cache.
         chunker: Optional chunker seam. When ``None``, the recursive-character
             chunker is built lazily.
     """
@@ -82,6 +119,7 @@ class IngestionJob:
         state_dir: Path,
         sources: list[Any],
         extractor: Any | None = None,
+        extractor_config: Any | None = None,
         chunker: Any | None = None,
     ) -> None:
         """Initialize the job and its ledger, loading any persisted item state."""
@@ -90,8 +128,10 @@ class IngestionJob:
         self._cache = cache
         self._sources = sources
         self._extractor = extractor
+        self._extractor_config = extractor_config
         self._chunker = chunker
         self._schema_version = _schema_version(target.schema)
+        self._extractor_version: str | None = None
 
     @property
     def id(self) -> str:
@@ -123,44 +163,63 @@ class IngestionJob:
         Returns:
             The final job manifest (``succeeded`` or ``partial``).
         """
+        record = self._ledger.record
+        if finalize:
+            record.finalize = True
         self._ledger.begin()
         for source in self._sources:
             if _source_kind(source) == "graph":
                 await self._ingest_graph(source)
             else:
                 await self._ingest_corpus(source)
-        if finalize:
+        if record.finalize and not record.finalized:
             await finalize_graph(self._target.graph_store)
+            record.finalized = True
+            self._ledger.persist()
         self._ledger.finish()
-        return self._ledger.record
+        return record
 
     async def resume(self) -> JobRecord:
         """Resume the job, skipping items already marked succeeded.
 
         Resume re-streams the in-memory sources; content-addressed item ids and
         the cache ensure succeeded chunks are skipped and unchanged extractions
-        are not recomputed.
+        are not recomputed. Finalization requested by the original run is retried
+        if it did not complete.
         """
         return await self.run()
 
     async def _ingest_corpus(self, source: Any) -> None:
-        """Chunk, extract, embed, and write one corpus source."""
-        write_batch_size = self._ledger.record.config.write_batch_size
-        async for doc_batch in source.astream(batch_size=write_batch_size):
+        """Chunk, extract, embed, and write one corpus source.
+
+        Each write batch is processed and checkpointed in slices of
+        ``embed_batch_size`` chunks, so a crash loses at most one slice.
+        """
+        config = self._ledger.record.config
+        async for doc_batch in source.astream(batch_size=config.write_batch_size):
             chunks: list[Chunk] = []
             for doc in doc_batch:
                 chunks.extend(await self._chunk([doc]))
             pending = self._skip_succeeded(chunks, kind="chunk")
-            if not pending:
-                self._ledger.persist()
-                continue
-            await self._process_chunk_slice(doc_batch, pending)
             self._ledger.persist()
+            docs_by_id = {doc.id: doc for doc in doc_batch}
+            for start in range(0, len(pending), config.embed_batch_size):
+                piece = pending[start : start + config.embed_batch_size]
+                piece_docs = [
+                    docs_by_id[doc_id]
+                    for doc_id in dict.fromkeys(c.document_id for c in piece)
+                    if doc_id in docs_by_id
+                ]
+                await self._process_chunk_slice(piece_docs, piece)
+                self._ledger.persist()
 
     async def _process_chunk_slice(
         self, doc_batch: list[Any], chunks: list[Chunk]
     ) -> None:
         """Extract (cached), embed (cached), and write one slice of chunks."""
+        for chunk in chunks:
+            self._item_for(chunk, kind="chunk").status = "processing"
+        self._ledger.persist()
         ok_entities, ok_relations, ok_chunks, new_cache = await self._extract_slice(
             chunks
         )
@@ -195,8 +254,9 @@ class IngestionJob:
             ok_relations.extend(rels)
             ok_chunks.append(chunk)
             if cache_payload is not None:
-                new_cache.append((item.item_id, cache_payload))
+                new_cache.append((self._extraction_key(chunk), cache_payload))
             item.status = "succeeded"
+            item.error = None
         return ok_entities, ok_relations, ok_chunks, new_cache
 
     async def _write_slice(
@@ -234,7 +294,7 @@ class IngestionJob:
             item_id = f"{name}:{index}"
             index += 1
             existing = self._ledger.get(item_id)
-            if existing and existing.status == "succeeded":
+            if existing and existing.status in ("succeeded", "skipped"):
                 existing.status = "skipped"
                 continue
             item = self._ledger.add(
@@ -245,10 +305,13 @@ class IngestionJob:
                     ref={"loader": name, "batch": index - 1},
                 )
             )
+            item.status = "processing"
+            self._ledger.persist()
             try:
                 await self._embed_and_upsert(kg.entities, kg.relations, [])
                 await self._target.graph_store.write_knowledge_graph(kg)
                 item.status = "succeeded"
+                item.error = None
             except Exception as exc:  # noqa: BLE001
                 item.status = "failed"
                 item.error = {"type": type(exc).__name__, "message": str(exc)}
@@ -264,13 +327,14 @@ class IngestionJob:
             ``cache_payload`` is non-None only on a fresh (uncached) extraction
             that should be written to the cache.
         """
-        key = self._chunk_item_id(chunk)
-        cached = await self._cache.get_extraction(key)
+        cached = await self._cache.get_extraction(self._extraction_key(chunk))
         if cached is not None:
             entities = [Entity.model_validate(e) for e in cached.get("entities", [])]
             relations = [
                 Relation.model_validate(r) for r in cached.get("relations", [])
             ]
+            _rebind_provenance(chunk, entities)
+            _rebind_provenance(chunk, relations)
             return chunk, entities, relations, None, None
         async with sem:
             error = None
@@ -363,9 +427,15 @@ class IngestionJob:
         cached = await self._cache.get_embeddings(keys)
         miss_indices = [i for i, k in enumerate(keys) if k not in cached]
         if miss_indices:
-            miss_vectors = await self._target.embedder.embed(
-                [texts[i] for i in miss_indices]
-            )
+            batch_size = self._ledger.record.config.embed_batch_size
+            miss_texts = [texts[i] for i in miss_indices]
+            miss_vectors: list[list[float]] = []
+            for start in range(0, len(miss_texts), batch_size):
+                miss_vectors.extend(
+                    await self._target.embedder.embed(
+                        miss_texts[start : start + batch_size]
+                    )
+                )
             await self._cache.put_embeddings(
                 [(keys[i], v) for i, v in zip(miss_indices, miss_vectors, strict=False)]
             )
@@ -387,9 +457,30 @@ class IngestionJob:
             )
 
             self._extractor = ComposedExtractor(
-                ExtractionPipelineConfig(), self._target.schema
+                self._extractor_config or ExtractionPipelineConfig(),
+                self._target.schema,
             )
         return self._extractor
+
+    def _extractor_fingerprint(self) -> str:
+        """Return a stable hash of the effective extractor, computed once.
+
+        An injected extractor is identified by its class. Otherwise the hash
+        covers the full pipeline config (models, thresholds, toggles).
+        """
+        if self._extractor_version is None:
+            if self._extractor is not None and self._extractor_config is None:
+                identity = type(self._extractor).__qualname__
+            else:
+                from am_diag.graph_construction.config import (  # noqa: PLC0415
+                    ExtractionPipelineConfig,
+                )
+
+                config = self._extractor_config or ExtractionPipelineConfig()
+                identity = config.model_dump_json()
+            digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+            self._extractor_version = digest[:16]
+        return self._extractor_version
 
     async def _chunk(self, docs: list[Any]) -> list[Chunk]:
         """Chunk documents with the configured chunker, built lazily."""
@@ -401,11 +492,23 @@ class IngestionJob:
             self._chunker = RecursiveCharacterTextChunker()
         return await self._chunker.chunk(docs)
 
-    def _chunk_item_id(self, chunk: Chunk) -> str:
-        """Return the content-addressed item id / extraction key for a chunk."""
+    def _extraction_key(self, chunk: Chunk) -> str:
+        """Return the text-only cache key for a chunk's extraction result."""
         return IngestionCache.extraction_key(
-            chunk.text, self._schema_version, _EXTRACTOR_MODEL_ID
+            chunk.text, self._schema_version, self._extractor_fingerprint()
         )
+
+    def _chunk_item_id(self, chunk: Chunk) -> str:
+        """Return the ledger id for a chunk.
+
+        Unlike the extraction key it includes the chunk identity, so distinct
+        chunks with identical text are tracked separately.
+        """
+        parts = (
+            str(chunk.id),
+            self._extraction_key(chunk),
+        )
+        return hashlib.sha256("\x00".join(parts).encode("utf-8")).hexdigest()
 
     def _item_for(self, chunk: Chunk, *, kind: str) -> JobItem:
         """Return (creating if needed) the JobItem tracking a chunk."""
@@ -427,7 +530,7 @@ class IngestionJob:
         pending: list[Chunk] = []
         for chunk in chunks:
             existing = self._ledger.get(self._chunk_item_id(chunk))
-            if existing and existing.status == "succeeded":
+            if existing and existing.status in ("succeeded", "skipped"):
                 existing.status = "skipped"
                 continue
             pending.append(chunk)
