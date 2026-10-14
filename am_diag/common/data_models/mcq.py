@@ -2,28 +2,55 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field, model_validator
+
+
+@dataclass(frozen=True, slots=True)
+class ExtractedMCQ:
+    """The seam between a loader's per-row parse and `MCQDataset._build_sample`.
+
+    A normalized, pre-shuffle view of one row. `answer_keys` is always a list
+    (length 1 for single-answer). `is_multi_answer` is declared by the loader,
+    never inferred from `len(answer_keys)`. `sample_id` defaults to `None`, in
+    which case the base falls back to `str(idx)`.
+
+    Attributes:
+        question_stem: The raw question text (without answer choices).
+        options: Mapping of option labels to option texts.
+        answer_keys: Correct option labels (length 1 for single-answer).
+        is_multi_answer: Whether the question expects multiple correct answers.
+        metadata: Dataset-specific provenance for the sample.
+        sample_id: Stable id for the row, or `None` to fall back to `str(idx)`.
+    """
+
+    question_stem: str
+    options: dict[str, str]
+    answer_keys: list[str]
+    is_multi_answer: bool = False
+    metadata: dict[str, Any] = field(default_factory=dict)
+    sample_id: str | None = None
 
 
 class MCQSample(BaseModel):
-    """A single MCQ sample normalized.
+    """A single normalized MCQ sample.
 
-    Invariants enforced by every MCQ loader:
-    - `answer == answer_key` (always an uppercase letter: "A", "B", …)
-    - `answer_text == options[answer_key]`
-    - `answer_key == answer_keys[0]`
-    - `answer_text == answer_texts[0]`
-    - `answer_texts[i] == options[answer_keys[i]]` for all i
+    Stores only independent state -- ``options``, ``answer_keys``, and
+    ``is_multi_answer``. The singular answer accessors are derived, so the
+    following invariants hold structurally rather than by assertion:
 
-    For questions with a single correct answer, `answer_keys` is a
-    one-element list (e.g. `["A"]`) and `is_multi_answer` is `False`.
+    - ``answer == answer_key == answer_keys[0]``
+    - ``answer_text == answer_texts[0] == options[answer_keys[0]]``
+    - ``answer_texts[i] == options[answer_keys[i]]`` for all ``i``
 
-    When `shuffle_options` is enabled:
-    - `question` contains the combined prompt (question stem + shuffled options).
-    - `options_original` preserves the original (unshuffled) option order for audit.
-    - `answer_key`, `answer_text`, and `options` reflect the shuffled state.
+    ``is_multi_answer`` is declared by the loader, never inferred from the
+    number of correct answers: a select-all question with a single correct
+    answer is ``answer_keys=["A"], is_multi_answer=True``.
+
+    When ``shuffle_options`` is enabled, ``options``/``answer_keys`` reflect the
+    shuffled state and ``options_original`` preserves the pre-shuffle order.
     """
 
     sample_id: str
@@ -31,12 +58,44 @@ class MCQSample(BaseModel):
     question_stem: str
     options: dict[str, str]
     options_original: dict[str, str] | None = None
-    answer_key: str
-    answer_text: str
-    answer: str
-    answer_keys: list[str] = []
-    answer_texts: list[str] = []
+    answer_keys: list[str]
     is_multi_answer: bool = False
     dataset: str
     split: str
     metadata: dict[str, Any]
+
+    @model_validator(mode="after")
+    def _check_answer_keys(self) -> MCQSample:
+        """Reject empty ``answer_keys`` or keys absent from ``options``."""
+        if not self.answer_keys:
+            raise ValueError("answer_keys must be non-empty")
+        missing = [k for k in self.answer_keys if k not in self.options]
+        if missing:
+            raise ValueError(
+                f"answer_keys {missing} absent from options {list(self.options)}",
+            )
+        return self
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def answer_key(self) -> str:
+        """The primary correct option label."""
+        return self.answer_keys[0]
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def answer(self) -> str:
+        """Alias of ``answer_key`` for the shared ``QASample`` shape."""
+        return self.answer_keys[0]
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def answer_text(self) -> str:
+        """Text of the primary correct option."""
+        return self.options[self.answer_keys[0]]
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def answer_texts(self) -> list[str]:
+        """Texts of all correct options, parallel to ``answer_keys``."""
+        return [self.options[k] for k in self.answer_keys]

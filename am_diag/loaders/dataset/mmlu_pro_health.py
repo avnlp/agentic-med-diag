@@ -2,20 +2,24 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any, ClassVar
 
 from datasets import load_dataset
 
 from am_diag.common.data_models import MCQSample, QASample
-from am_diag.loaders.dataset.base import QADataset
-from am_diag.loaders.dataset.prompt import format_mcq_prompt
-from am_diag.loaders.dataset.shuffle_utils import shuffle_options
+from am_diag.loaders.dataset.base import ExtractedMCQ, MCQDataset
 
 
 _VALID_ANSWER_KEYS: frozenset[str] = frozenset("ABCDEFGHIJ")
 
 
-class MMLUProHealthDataset(QADataset):
+def _is_health(row: Any) -> bool:
+    """Whether a raw MMLU-Pro row belongs to the health category."""
+    return (row.get("category") or "").lower() == "health"
+
+
+class MMLUProHealthDataset(MCQDataset):
     """Loader for the MMLU-Pro Health dataset."""
 
     dataset_name: ClassVar[str] = "mmlu_pro_health"
@@ -44,44 +48,40 @@ class MMLUProHealthDataset(QADataset):
         split: str | None = None,
         limit: int | None = None,
     ) -> list[QASample]:
-        """Load the MMLU-Pro Health dataset.
+        """Load the dataset, first populating `few_shot_examples` from validation.
 
         Args:
-            split: Dataset split (`"test"` or other splits).
-            limit: Maximum number of samples.
+            split: Dataset split to load. Defaults to `self.default_split`.
+            limit: Maximum number of samples to return.
 
         Returns:
-            List of MCQSample instances.
+            List of parsed `MCQSample` instances (a `QASample` subtype).
         """
-        target_split = split or self.default_split
+        self.few_shot_examples = self._collect_few_shot()
+        return super().load(split, limit)
 
-        # Populate few-shot examples from validation.
-        self.few_shot_examples = []
-        val_ds = load_dataset(self.hf_repo, split="validation", streaming=True)
-        val_ds = val_ds.filter(lambda r: (r.get("category") or "").lower() == "health")
-        for idx, row in enumerate(val_ds):
-            sample = self._row_to_sample(idx, row, "validation")
-            if sample is not None:
-                self.few_shot_examples.append(sample)
-            if len(self.few_shot_examples) >= self._num_few_shot:
-                break
-
-        ds = load_dataset(self.hf_repo, split=target_split, streaming=True)
-        ds = ds.filter(lambda r: (r.get("category") or "").lower() == "health")
-        if limit is not None:
-            ds = ds.take(limit)
-        result: list[QASample] = []
+    def _collect_few_shot(self) -> list[MCQSample]:
+        """Build up to `num_few_shot` examples from the validation split."""
+        ds = load_dataset(self.hf_repo, split="validation", streaming=True)
+        ds = ds.filter(_is_health)
+        examples: list[MCQSample] = []
         for idx, row in enumerate(ds):
-            sample = self._row_to_sample(idx, row, target_split)
-            if sample is not None:
-                result.append(sample)
-        return result
+            extracted = self._extract(idx, row)
+            if extracted is not None:
+                examples.append(self._build_sample(idx, extracted, "validation"))
+            if len(examples) >= self._num_few_shot:
+                break
+        return examples
 
-    def _row_to_sample(self, idx: int, row: Any, split: str) -> MCQSample | None:
-        question_stem = (row.get("question") or "").strip()
-        if not question_stem:
+    def _rows(self, split: str) -> Iterable[Any]:
+        ds = load_dataset(self.hf_repo, split=split, streaming=True)
+        yield from ds.filter(_is_health)
+
+    def _extract(self, idx: int, record: Any) -> ExtractedMCQ | None:
+        stem = (record.get("question") or "").strip()
+        if not stem:
             return None
-        raw_options: list[Any] = row.get("options") or []
+        raw_options: list[Any] = record.get("options") or []
         options = {
             chr(ord("A") + i): str(v)
             for i, v in enumerate(raw_options)
@@ -89,40 +89,18 @@ class MMLUProHealthDataset(QADataset):
         }
         if not options:
             return None
-        answer_key = str(row.get("answer") or "").strip().upper()
-        if answer_key not in _VALID_ANSWER_KEYS or answer_key not in options:
+        key = str(record.get("answer") or "").strip().upper()
+        if key not in _VALID_ANSWER_KEYS or key not in options:
             return None
-        answer_text = options[answer_key]
-
-        options_original: dict[str, str] | None = None
-        if self.shuffle_options:
-            shuffled, new_key, _ = shuffle_options(
-                options,
-                answer_key,
-                seed=self.shuffle_seed,
-                row_id=idx,
-            )
-            options_original = options
-            options = shuffled
-            answer_key = new_key
-            answer_text = options[answer_key]
-
-        question = format_mcq_prompt(question_stem, options)
-        return MCQSample(
-            sample_id=str(row.get("question_id", idx)),
-            question=question,
-            question_stem=question_stem,
+        return ExtractedMCQ(
+            question_stem=stem,
             options=options,
-            options_original=options_original,
-            answer_key=answer_key,
-            answer_text=answer_text,
-            answer=answer_key,
-            dataset=self.dataset_name,
-            split=split,
+            answer_keys=[key],
             metadata={
-                "category": row.get("category", ""),
-                "cot_content": row.get("cot_content", ""),
-                "src": row.get("src", ""),
-                "question_id": row.get("question_id", ""),
+                "category": record.get("category", ""),
+                "cot_content": record.get("cot_content", ""),
+                "src": record.get("src", ""),
+                "question_id": record.get("question_id", ""),
             },
+            sample_id=str(record.get("question_id", idx)),
         )

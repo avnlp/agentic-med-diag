@@ -1,7 +1,4 @@
-"""Shared assertion helpers for loader integration tests.
-
-Plain assertion functions — NOT a class, NOT a mixin. Composition over inheritance.
-"""
+"""Shared assertion helpers for loader integration tests."""
 
 from __future__ import annotations
 
@@ -28,9 +25,9 @@ def assert_mcq_invariants(samples: list[MCQSample]) -> None:
         assert s.answer_text == s.options[s.answer_key], (
             f"{s.sample_id}: answer_text doesn't match options[answer_key]"
         )
-        if s.answer_keys:
-            assert s.answer_key == s.answer_keys[0]
-            assert s.answer_text == s.answer_texts[0]
+        assert s.answer_keys, f"{s.sample_id}: answer_keys must be non-empty"
+        assert s.answer_key == s.answer_keys[0]
+        assert s.answer_text == s.answer_texts[0]
 
 
 def assert_mcq_question_format(sample: MCQSample, has_context: bool = False) -> None:
@@ -76,7 +73,7 @@ def assert_limit_zero_returns_empty(loader_factory: Callable[..., Any]) -> None:
 
 
 def assert_openended_invariants(samples: list[QASample]) -> None:
-    """Assert open-ended sample invariants."""
+    """Assert open-ended sample invariants: answer, reference_answer, question."""
     for s in samples:
         assert s.answer, f"{s.sample_id}: answer should not be empty"
         assert s.reference_answer, (

@@ -1,6 +1,7 @@
-"""Integration tests for CareQA MCQ dataset loader — loads real data via streaming.
+"""Integration tests for CareQA MCQ dataset loader.
 
-These tests require network access to HuggingFace Datasets.
+Covers column-option format (op1/op2/op3/op4), cop-to-letter mapping,
+subject-metadata preservation, and shuffle invariants.
 """
 
 from __future__ import annotations
@@ -24,20 +25,20 @@ class TestCareQADatasetIntegration:
 
     SAMPLE_LIMIT = 10
 
-    def test_load_5_samples(self):
-        """Loader streams real CareQA samples and returns MCQSample instances."""
+    def test_load_samples(self):
+        """Test loading samples when a limit is specified."""
         samples = CareQADataset().load(limit=5)
         assert 1 <= len(samples) <= 5
         assert all(isinstance(s, MCQSample) for s in samples)
 
     def test_invariants(self):
-        """answer == answer_key and answer_text matches options[answer_key]."""
+        """Test the answer == answer_key and answer_text matches options[answer_key]."""
         samples = CareQADataset().load(limit=self.SAMPLE_LIMIT)
         assert_mcq_invariants(samples)
         assert_dataset_name(samples, "careqa")
 
     def test_options_always_has_4_keys(self):
-        """CareQA always has exactly 4 options labeled A-D."""
+        """Test that CareQA always has exactly 4 options labeled A-D."""
         samples = CareQADataset().load(limit=self.SAMPLE_LIMIT)
         for s in samples:
             assert set(s.options.keys()) == {"A", "B", "C", "D"}, (
@@ -46,25 +47,25 @@ class TestCareQADatasetIntegration:
             assert s.answer_key in ("A", "B", "C", "D")
 
     def test_split_field(self):
-        """split field reflects the requested split."""
+        """Test that the split field reflects the requested split."""
         samples = CareQADataset().load(limit=5)
         assert_split_value(samples, "test")
 
     def test_question_format(self):
-        """question is a formatted prompt with Question/Choices/Answer structure."""
+        """Test the question follows the Question/Choices/Answer format."""
         samples = CareQADataset().load(limit=self.SAMPLE_LIMIT)
         for s in samples:
             assert_mcq_question_format(s)
 
     def test_metadata_has_subject_and_id(self):
-        """metadata contains 'subject' and 'id' keys."""
+        """Test that metadata contains 'subject' and 'id' keys."""
         samples = CareQADataset().load(limit=self.SAMPLE_LIMIT)
         for s in samples:
             assert "subject" in s.metadata, f"Sample {s.sample_id}: missing subject"
             assert "id" in s.metadata, f"Sample {s.sample_id}: missing id"
 
     def test_non_empty_fields(self):
-        """Every sample has non-empty question, question_stem, option texts, answer."""
+        """Test that every sample has non-empty question, stem, options, and answer."""
         samples = CareQADataset().load(limit=self.SAMPLE_LIMIT)
         for s in samples:
             assert s.question, f"Sample {s.sample_id}: empty question"
@@ -76,18 +77,18 @@ class TestCareQADatasetIntegration:
             assert s.answer_text, f"Sample {s.sample_id}: empty answer_text"
 
     def test_shuffle_preserves_originals(self):
-        """When shuffle is on, options_original is populated."""
+        """Test that when shuffle is on, options_original is populated."""
         assert_shuffle_works(CareQADataset)
 
     def test_no_shuffle(self):
-        """When shuffle is off, options_original is None."""
+        """Test that when shuffle is off, options_original is None."""
         loader = CareQADataset(shuffle_options=False)
         samples = loader.load(limit=self.SAMPLE_LIMIT)
         for s in samples:
             assert s.options_original is None
 
     def test_sample_ids_are_strings(self):
-        """sample_id values are strings."""
+        """Test that sample_id values are strings."""
         samples = CareQADataset().load(limit=self.SAMPLE_LIMIT)
         for s in samples:
             assert isinstance(s.sample_id, str), (
@@ -95,5 +96,5 @@ class TestCareQADatasetIntegration:
             )
 
     def test_limit_zero_returns_empty(self):
-        """limit=0 returns an empty list."""
+        """Test that limit=0 returns an empty list."""
         assert_limit_zero_returns_empty(CareQADataset)

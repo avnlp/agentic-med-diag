@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any, ClassVar
 
 from datasets import load_dataset
 
-from am_diag.common.data_models import MCQSample, QASample
-from am_diag.loaders.dataset.base import QADataset
-from am_diag.loaders.dataset.prompt import format_mcq_prompt
-from am_diag.loaders.dataset.shuffle_utils import shuffle_options
+from am_diag.loaders.dataset.base import ExtractedMCQ, MCQDataset
 
 
 _SUBJECTS: list[str] = [
@@ -22,7 +20,7 @@ _SUBJECTS: list[str] = [
 ]
 
 
-class MMLUMedDataset(QADataset):
+class MMLUMedDataset(MCQDataset):
     """Loader for the MMLU-Med (6-subject subset) multiple-choice question dataset.
 
     The included subjects are: anatomy, clinical knowledge, college biology,
@@ -49,84 +47,32 @@ class MMLUMedDataset(QADataset):
         super().__init__(shuffle_options=shuffle_options, shuffle_seed=shuffle_seed)
         self._subjects = subjects if subjects is not None else list(_SUBJECTS)
 
-    def load(
-        self,
-        split: str | None = None,
-        limit: int | None = None,
-    ) -> list[QASample]:
-        """Load the MMLU-Med dataset.
-
-        Args:
-            split: Dataset split (`"test"` or other splits).
-            limit: Maximum number of samples.
-
-        Returns:
-            List of MCQSample instances.
-        """
-        target_split = split or self.default_split
-        result: list[QASample] = []
+    def _rows(self, split: str) -> Iterable[tuple[str, Any]]:
         for subject in self._subjects:
-            if limit is not None and len(result) >= limit:
-                break
-            remaining = limit - len(result) if limit is not None else None
-            ds = load_dataset(self.hf_repo, subject, split=target_split, streaming=True)
-            if remaining is not None:
-                ds = ds.take(remaining)
-            for idx, row in enumerate(ds):
-                sample = self._row_to_sample(idx, row, target_split, subject=subject)
-                if sample is not None:
-                    result.append(sample)
-        return result
+            ds = load_dataset(self.hf_repo, subject, split=split, streaming=True)
+            for row in ds:
+                yield subject, row
 
-    def _row_to_sample(
-        self,
-        idx: int,
-        row: Any,
-        split: str,
-        subject: str = "",
-    ) -> MCQSample | None:
-        question_stem = (row.get("question") or "").strip()
-        if not question_stem:
-            return None
+    def _extract(self, idx: int, record: Any) -> ExtractedMCQ | None:
+        subject, row = record
+        stem = (row.get("question") or "").strip()
         choices: list[Any] = row.get("choices") or []
-        if not choices:
+        if not stem or not choices:
             return None
         options = {chr(ord("A") + i): str(v) for i, v in enumerate(choices)}
         raw_answer = row.get("answer")
         if raw_answer is None:
             return None
         try:
-            answer_key = chr(ord("A") + int(raw_answer))
+            key = chr(ord("A") + int(raw_answer))
         except (ValueError, TypeError):
             return None
-        if answer_key not in options:
+        if key not in options:
             return None
-        answer_text = options[answer_key]
-
-        options_original: dict[str, str] | None = None
-        if self.shuffle_options:
-            shuffled, new_key, _ = shuffle_options(
-                options,
-                answer_key,
-                seed=self.shuffle_seed,
-                row_id=idx,
-            )
-            options_original = options
-            options = shuffled
-            answer_key = new_key
-            answer_text = options[answer_key]
-
-        question = format_mcq_prompt(question_stem, options)
-        return MCQSample(
-            sample_id=f"{subject}_{idx}",
-            question=question,
-            question_stem=question_stem,
+        return ExtractedMCQ(
+            question_stem=stem,
             options=options,
-            options_original=options_original,
-            answer_key=answer_key,
-            answer_text=answer_text,
-            answer=answer_key,
-            dataset=self.dataset_name,
-            split=split,
+            answer_keys=[key],
             metadata={"subject": subject},
+            sample_id=f"{subject}_{idx}",
         )

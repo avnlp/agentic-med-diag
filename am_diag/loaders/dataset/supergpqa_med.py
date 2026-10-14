@@ -2,20 +2,18 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any, ClassVar
 
 from datasets import load_dataset
 
-from am_diag.common.data_models import MCQSample, QASample
-from am_diag.loaders.dataset.base import QADataset
-from am_diag.loaders.dataset.prompt import format_mcq_prompt
-from am_diag.loaders.dataset.shuffle_utils import shuffle_options
+from am_diag.loaders.dataset.base import ExtractedMCQ, MCQDataset
 
 
 _VALID_ANSWER_KEYS: frozenset[str] = frozenset("ABCDEFGHIJ")
 
 
-class SuperGPQAMedDataset(QADataset):
+class SuperGPQAMedDataset(MCQDataset):
     """Loader for the SuperGPQA Medicine dataset.
 
     Args:
@@ -46,22 +44,8 @@ class SuperGPQAMedDataset(QADataset):
         self._field = field
         self._difficulty = difficulty
 
-    def load(
-        self,
-        split: str | None = None,
-        limit: int | None = None,
-    ) -> list[QASample]:
-        """Load the SuperGPQA Medicine dataset.
-
-        Args:
-            split: Dataset split (defaults to `"train"`).
-            limit: Maximum number of samples.
-
-        Returns:
-            List of MCQSample instances.
-        """
-        target_split = split or self.default_split
-        ds = load_dataset(self.hf_repo, split=target_split, streaming=True)
+    def _rows(self, split: str) -> Iterable[Any]:
+        ds = load_dataset(self.hf_repo, split=split, streaming=True)
         ds = ds.filter(lambda r: (r.get("discipline") or "") == "Medicine")
         if self._field is not None:
             fld = self._field
@@ -69,57 +53,25 @@ class SuperGPQAMedDataset(QADataset):
         if self._difficulty is not None:
             diff = self._difficulty
             ds = ds.filter(lambda r: r.get("difficulty") == diff)
-        if limit is not None:
-            ds = ds.take(limit)
-        result: list[QASample] = []
-        for idx, row in enumerate(ds):
-            sample = self._row_to_sample(idx, row, target_split)
-            if sample is not None:
-                result.append(sample)
-        return result
+        yield from ds
 
-    def _row_to_sample(self, idx: int, row: Any, split: str) -> MCQSample | None:
-        question_stem = (row.get("question") or "").strip()
-        if not question_stem:
-            return None
-        raw_options: list[Any] = row.get("options") or []
-        if not raw_options:
+    def _extract(self, idx: int, record: Any) -> ExtractedMCQ | None:
+        stem = (record.get("question") or "").strip()
+        raw_options: list[Any] = record.get("options") or []
+        if not stem or not raw_options:
             return None
         options = {chr(ord("A") + i): str(v) for i, v in enumerate(raw_options)}
-        answer_key = str(row.get("answer_letter") or "").strip().upper()
-        if answer_key not in _VALID_ANSWER_KEYS or answer_key not in options:
+        key = str(record.get("answer_letter") or "").strip().upper()
+        if key not in _VALID_ANSWER_KEYS or key not in options:
             return None
-        answer_text = options[answer_key]
-
-        options_original: dict[str, str] | None = None
-        if self.shuffle_options:
-            shuffled, new_key, _ = shuffle_options(
-                options,
-                answer_key,
-                seed=self.shuffle_seed,
-                row_id=idx,
-            )
-            options_original = options
-            options = shuffled
-            answer_key = new_key
-            answer_text = options[answer_key]
-
-        question = format_mcq_prompt(question_stem, options)
-        return MCQSample(
-            sample_id=str(idx),
-            question=question,
-            question_stem=question_stem,
+        return ExtractedMCQ(
+            question_stem=stem,
             options=options,
-            options_original=options_original,
-            answer_key=answer_key,
-            answer_text=answer_text,
-            answer=answer_key,
-            dataset=self.dataset_name,
-            split=split,
+            answer_keys=[key],
             metadata={
-                "field": row.get("field", ""),
-                "difficulty": row.get("difficulty", ""),
-                "discipline": row.get("discipline", ""),
-                "source": row.get("source", ""),
+                "field": record.get("field", ""),
+                "difficulty": record.get("difficulty", ""),
+                "discipline": record.get("discipline", ""),
+                "source": record.get("source", ""),
             },
         )

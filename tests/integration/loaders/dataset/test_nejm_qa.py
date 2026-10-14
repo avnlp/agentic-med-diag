@@ -1,6 +1,7 @@
 """Integration tests for NEJM Q&A dataset loader.
 
-These tests require network access to HuggingFace Datasets.
+Covers multi-answer parsing and invariants, specialty-split loading,
+shuffle with multi-answer key tracking, and inline option extraction.
 """
 
 from __future__ import annotations
@@ -24,14 +25,14 @@ class TestNEJMQADatasetIntegration:
 
     SAMPLE_LIMIT = 10
 
-    def test_load_5_samples(self):
-        """Loader streams real NEJM QA samples and returns MCQSample instances."""
+    def test_load_samples(self):
+        """Test loading samples when a limit is specified."""
         samples = NEJMQADataset().load(split="internal_medicine", limit=5)
         assert 1 <= len(samples) <= 5
         assert all(isinstance(s, MCQSample) for s in samples)
 
     def test_invariants(self):
-        """Core invariants: answer == answer_key, answer_text matches options."""
+        """Test the answer == answer_key and answer_text matches options."""
         samples = NEJMQADataset(shuffle_options=False).load(
             split="internal_medicine",
             limit=self.SAMPLE_LIMIT,
@@ -40,7 +41,7 @@ class TestNEJMQADatasetIntegration:
         assert_dataset_name(samples, "nejm_qa")
 
     def test_multi_answer_invariants(self):
-        """Multi-answer invariants: answer_keys, answer_texts, is_multi_answer."""
+        """Test multi-answer invariants: answer_keys, answer_texts, is_multi_answer."""
         samples = NEJMQADataset(shuffle_options=False).load(split="all", limit=200)
         multi = [s for s in samples if s.is_multi_answer]
         assert len(multi) > 0, "No multi-answer questions found"
@@ -56,7 +57,7 @@ class TestNEJMQADatasetIntegration:
                 )
 
     def test_options_have_4_keys(self):
-        """NEJM QA questions have 4 options labeled A-D."""
+        """Test that NEJM QA questions have 4 options labeled A-D."""
         samples = NEJMQADataset(shuffle_options=False).load(
             split="internal_medicine",
             limit=self.SAMPLE_LIMIT,
@@ -68,23 +69,23 @@ class TestNEJMQADatasetIntegration:
             assert s.answer_key in ("A", "B", "C", "D")
 
     def test_split_field(self):
-        """split field reflects the requested specialty."""
+        """Test that the split field reflects the requested split."""
         samples = NEJMQADataset().load(split="pediatrics", limit=5)
         assert_split_value(samples, "pediatrics")
 
     def test_split_field_default(self):
-        """default split is 'all'."""
+        """Test that the default split is 'all'."""
         assert NEJMQADataset.default_split == "all"
 
     def test_sample_ids_format(self):
-        """sample_id includes specialty prefix and row index."""
+        """Test that sample_id includes specialty prefix and row index."""
         samples = NEJMQADataset().load(split="psychiatry", limit=5)
         for s in samples:
             assert s.sample_id.startswith("psychiatry_")
             assert s.sample_id.split("_")[-1].isdigit()
 
     def test_question_format(self):
-        """question is a formatted prompt with Question/Choices/Answer structure."""
+        """Test the question follows the Question/Choices/Answer format."""
         samples = NEJMQADataset(shuffle_options=False).load(
             split="internal_medicine",
             limit=self.SAMPLE_LIMIT,
@@ -93,7 +94,7 @@ class TestNEJMQADatasetIntegration:
             assert_mcq_question_format(s)
 
     def test_multi_answer_prompt_format(self):
-        """Multi-answer questions use 'A or B,C' instruction."""
+        """Test that multi-answer questions use 'A or B,C' instruction."""
         samples = NEJMQADataset(shuffle_options=False).load(split="all", limit=200)
         multi = [s for s in samples if s.is_multi_answer]
         assert len(multi) > 0, "No multi-answer questions found"
@@ -102,25 +103,25 @@ class TestNEJMQADatasetIntegration:
             assert "option(s)" in s.question
 
     def test_shuffle_preserves_originals(self):
-        """When shuffle is on, options_original is populated."""
+        """Test that when shuffle is on, options_original is populated."""
         assert_shuffle_works(NEJMQADataset)
 
     def test_no_shuffle(self):
-        """When shuffle is off, options_original is None."""
+        """Test that when shuffle is off, options_original is None."""
         loader = NEJMQADataset(shuffle_options=False)
         samples = loader.load(split="internal_medicine", limit=self.SAMPLE_LIMIT)
         for s in samples:
             assert s.options_original is None
 
     def test_load_all_specialties(self):
-        """Loading split='all' loads samples from multiple specialties."""
+        """Test that loading split='all' loads samples from multiple specialties."""
         samples = NEJMQADataset(shuffle_options=False).load(split="all", limit=50)
         assert len(samples) > 0
         specialties = {s.split for s in samples}
         assert len(specialties) > 0
 
     def test_question_stem_and_options_not_empty(self):
-        """Every sample has a non-empty question stem and non-empty options."""
+        """Test every sample has a non-empty question stem and options."""
         samples = NEJMQADataset(shuffle_options=False).load(
             split="internal_medicine",
             limit=self.SAMPLE_LIMIT,
@@ -133,7 +134,7 @@ class TestNEJMQADatasetIntegration:
             )
 
     def test_metadata_has_specialty(self):
-        """Metadata contains specialty and answer_raw."""
+        """Test that metadata contains specialty and answer_raw."""
         samples = NEJMQADataset(shuffle_options=False).load(
             split="general_surgery",
             limit=5,
@@ -144,11 +145,11 @@ class TestNEJMQADatasetIntegration:
             assert "answer_letters" in s.metadata
 
     def test_limit_zero_returns_empty(self):
-        """limit=0 returns an empty list."""
+        """Test that limit=0 returns an empty list."""
         assert_limit_zero_returns_empty(NEJMQADataset)
 
     def test_shuffle_changes_answer_key(self):
-        """Shuffled answer_key differs from original for at least some samples."""
+        """Test shuffled answer_key differs from original for some samples."""
         no_shuffle = NEJMQADataset(shuffle_options=False).load(
             split="internal_medicine",
             limit=self.SAMPLE_LIMIT,
