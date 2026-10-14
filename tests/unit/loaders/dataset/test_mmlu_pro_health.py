@@ -188,3 +188,13 @@ class TestMMLUProHealthDataset(ShuffleTestMixin):
         loader.load()
         # If streaming works, we should get results
         assert len(loader.few_shot_examples) >= 1
+
+    def test_zero_few_shot_collects_none(self, patch_load_dataset):
+        """Test that num_few_shot=0 stores no few-shot examples."""
+        patch_load_dataset(
+            "am_diag.loaders.dataset.mmlu_pro_health",
+            [make_list_letter_answer_row() for _ in range(3)],
+        )
+        loader = MMLUProHealthDataset(num_few_shot=0)
+        loader.load()
+        assert loader.few_shot_examples == []

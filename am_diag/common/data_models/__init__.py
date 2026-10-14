@@ -26,7 +26,7 @@ from am_diag.common.data_models.document import Document
 from am_diag.common.data_models.entity import Entity
 from am_diag.common.data_models.enums import Distance, ExtractorName
 from am_diag.common.data_models.knowledge_graph import KnowledgeGraph
-from am_diag.common.data_models.mcq import MCQSample
+from am_diag.common.data_models.mcq import ExtractedMCQ, MCQSample
 from am_diag.common.data_models.metadata import MetaData
 from am_diag.common.data_models.provenance import Provenance
 from am_diag.common.data_models.qa import OpenEndedSample
@@ -61,6 +61,7 @@ __all__ = [
     "Entity",
     "EntityType",
     "EvidenceItem",
+    "ExtractedMCQ",
     "ExtractorName",
     "Finding",
     "GraphSchema",

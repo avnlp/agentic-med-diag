@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any, ClassVar
 
 from datasets import load_dataset
 
-from am_diag.common.data_models import MCQSample, QASample
-from am_diag.loaders.dataset.base import QADataset
-from am_diag.loaders.dataset.prompt import format_mcq_prompt
-from am_diag.loaders.dataset.shuffle_utils import shuffle_options
+from am_diag.loaders.dataset.base import ExtractedMCQ, MCQDataset
 
 
-class MedXpertQADataset(QADataset):
+class MedXpertQADataset(MCQDataset):
     """Loader for the MedXpertQA multiple-choice question dataset."""
 
     dataset_name: ClassVar[str] = "medxpertqa"
@@ -35,79 +33,34 @@ class MedXpertQADataset(QADataset):
         super().__init__(shuffle_options=shuffle_options, shuffle_seed=shuffle_seed)
         self._question_type = question_type
 
-    def load(
-        self,
-        split: str | None = None,
-        limit: int | None = None,
-    ) -> list[QASample]:
-        """Load the MedXpertQA dataset.
-
-        Args:
-            split: Dataset split (`"test"` or other splits).
-            limit: Maximum number of samples.
-
-        Returns:
-            List of MCQSample instances.
-        """
-        target_split = split or self.default_split
-        ds = load_dataset(self.hf_repo, "Text", split=target_split, streaming=True)
+    def _rows(self, split: str) -> Iterable[Any]:
+        ds = load_dataset(self.hf_repo, "Text", split=split, streaming=True)
         if self._question_type is not None:
             qt = self._question_type
             ds = ds.filter(lambda r: (r.get("question_type") or "") == qt)
-        if limit is not None:
-            ds = ds.take(limit)
-        result: list[QASample] = []
-        for idx, row in enumerate(ds):
-            sample = self._row_to_sample(idx, row, target_split)
-            if sample is not None:
-                result.append(sample)
-        return result
+        yield from ds
 
-    def _row_to_sample(self, idx: int, row: Any, split: str) -> MCQSample | None:
-        raw_question = str(row.get("question") or "")
+    def _extract(self, idx: int, record: Any) -> ExtractedMCQ | None:
+        raw_question = str(record.get("question") or "")
         if "Answer Choices:" in raw_question:
-            question_stem = raw_question.partition("Answer Choices:")[0].strip()
+            stem = raw_question.partition("Answer Choices:")[0].strip()
         else:
-            question_stem = raw_question.strip()
-        if not question_stem:
+            stem = raw_question.strip()
+        if not stem:
             return None
-        options: dict[str, str] = row.get("options") or {}
-        if not options:
+        options: dict[str, str] = record.get("options") or {}
+        key = str(record.get("label") or "").strip().upper()
+        if not options or key not in options:
             return None
-        answer_key = str(row.get("label") or "").strip().upper()
-        if answer_key not in options:
-            return None
-        answer_text = options[answer_key]
-
-        options_original: dict[str, str] | None = None
-        if self.shuffle_options:
-            shuffled, new_key, _ = shuffle_options(
-                options,
-                answer_key,
-                seed=self.shuffle_seed,
-                row_id=idx,
-            )
-            options_original = options
-            options = shuffled
-            answer_key = new_key
-            answer_text = options[answer_key]
-
-        question = format_mcq_prompt(question_stem, options)
-        return MCQSample(
-            sample_id=str(row.get("id", idx)),
-            question=question,
-            question_stem=question_stem,
+        return ExtractedMCQ(
+            question_stem=stem,
             options=options,
-            options_original=options_original,
-            answer_key=answer_key,
-            answer_text=answer_text,
-            answer=answer_key,
-            dataset=self.dataset_name,
-            split=split,
+            answer_keys=[key],
             metadata={
-                "medical_task": row.get("medical_task", ""),
-                "body_system": row.get("body_system", ""),
-                "question_type": row.get("question_type", ""),
-                "id": row.get("id", ""),
+                "medical_task": record.get("medical_task", ""),
+                "body_system": record.get("body_system", ""),
+                "question_type": record.get("question_type", ""),
+                "id": record.get("id", ""),
             },
+            sample_id=str(record.get("id", idx)),
         )

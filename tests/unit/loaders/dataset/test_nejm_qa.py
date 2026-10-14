@@ -262,3 +262,21 @@ class TestNEJMQADataset(ShuffleTestMixin):
     def patch_single_specialty(self, mocker):
         """Pin specialties to a single entry for deterministic tests."""
         mocker.patch("am_diag.loaders.dataset.nejm_qa._SPECIALTIES", ["pediatrics"])
+
+    def test_ids_and_shuffle_stable_across_specialty_selection(
+        self, patch_load_dataset, mocker
+    ):
+        """Test that a specialty's samples are the same under 'all' and alone."""
+        mocker.patch(
+            "am_diag.loaders.dataset.nejm_qa._SPECIALTIES",
+            ["pediatrics", "psychiatry"],
+        )
+        patch_load_dataset(
+            "am_diag.loaders.dataset.nejm_qa",
+            [make_mcq_row(), make_mcq_row()],
+        )
+        alone = NEJMQADataset().load(split="psychiatry")
+        everything = NEJMQADataset().load(split="all")
+        psychiatry = [s for s in everything if s.metadata["specialty"] == "psychiatry"]
+        assert [s.sample_id for s in psychiatry] == [s.sample_id for s in alone]
+        assert [s.options for s in psychiatry] == [s.options for s in alone]

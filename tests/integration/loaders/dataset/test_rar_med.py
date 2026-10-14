@@ -1,6 +1,7 @@
 """Integration tests for RAR-Medicine rubric dataset loader.
 
-These tests require network access to HuggingFace Datasets.
+Covers raw-dict rubric storage, question-source metadata,
+rubric-count variance across samples, and default split (train).
 """
 
 from __future__ import annotations
@@ -16,14 +17,14 @@ class TestRARMedDatasetIntegration:
 
     SAMPLE_LIMIT = 10
 
-    def test_load_5_samples(self):
-        """Loader streams real samples and returns RARMedSample instances."""
+    def test_load_samples(self):
+        """Test loading samples when a limit is specified."""
         samples = RARMedDataset().load(limit=5)
         assert 1 <= len(samples) <= 5
         assert all(isinstance(s, RARMedSample) for s in samples)
 
     def test_invariants(self):
-        """answer == reference_answer and all required fields are non-empty."""
+        """Test the answer == reference_answer and all required fields are non-empty."""
         samples = RARMedDataset().load(limit=self.SAMPLE_LIMIT)
         for s in samples:
             assert s.answer == s.reference_answer, (
@@ -35,19 +36,19 @@ class TestRARMedDatasetIntegration:
         assert_dataset_name(samples, "rar_med")
 
     def test_sample_ids_are_sequential(self):
-        """sample_id strings are sequential row indices starting from 0."""
+        """Test that sample_id strings are sequential row indices starting from 0."""
         samples = RARMedDataset().load(limit=self.SAMPLE_LIMIT)
         for i, s in enumerate(samples):
             assert s.sample_id == str(i)
 
     def test_question_stem_field(self):
-        """question_stem is present (may be empty string for this loader)."""
+        """Test that question_stem is present (may be empty string for this loader)."""
         samples = RARMedDataset().load(limit=self.SAMPLE_LIMIT)
         for s in samples:
             assert s.question_stem == ""
 
     def test_rubrics_are_non_empty_lists(self):
-        """Every sample has non-empty rubrics list with dict entries."""
+        """Test that every sample has non-empty rubrics list with dict entries."""
         samples = RARMedDataset().load(limit=self.SAMPLE_LIMIT)
         for s in samples:
             assert isinstance(s.rubrics, list), (
@@ -63,7 +64,7 @@ class TestRARMedDatasetIntegration:
                 assert "weight" in rubric
 
     def test_metadata_structure(self):
-        """Metadata contains question_source and rubric_list."""
+        """Test that metadata contains question_source and rubric_list."""
         samples = RARMedDataset().load(limit=self.SAMPLE_LIMIT)
         for s in samples:
             assert isinstance(s.metadata, dict)
@@ -72,15 +73,15 @@ class TestRARMedDatasetIntegration:
             assert "rubric_count" in s.metadata
 
     def test_default_split_is_train(self):
-        """default split is 'train'."""
+        """Test that the default split is 'train'."""
         assert RARMedDataset.default_split == "train"
 
     def test_limit_zero_returns_empty(self):
-        """limit=0 returns an empty list."""
+        """Test that limit=0 returns an empty list."""
         assert_limit_zero_returns_empty(RARMedDataset)
 
     def test_different_rubric_counts(self):
-        """Different samples have different rubric counts."""
+        """Test that different samples have different rubric counts."""
         samples = RARMedDataset().load(limit=self.SAMPLE_LIMIT)
         counts = {len(s.rubrics) for s in samples}
         assert len(counts) > 0

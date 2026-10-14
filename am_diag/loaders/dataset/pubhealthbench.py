@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any, ClassVar
 
 from datasets import load_dataset
 
-from am_diag.common.data_models import MCQSample, QASample
-from am_diag.loaders.dataset.base import QADataset
-from am_diag.loaders.dataset.prompt import format_mcq_prompt
-from am_diag.loaders.dataset.shuffle_utils import shuffle_options
+from am_diag.loaders.dataset.base import ExtractedMCQ, MCQDataset
 
 
-class PubHealthBenchDataset(QADataset):
+class PubHealthBenchDataset(MCQDataset):
     """Loader for PubHealthBench dataset.
 
     Args:
@@ -40,81 +38,36 @@ class PubHealthBenchDataset(QADataset):
         super().__init__(shuffle_options=shuffle_options, shuffle_seed=shuffle_seed)
         self._category = category
 
-    def load(
-        self,
-        split: str | None = None,
-        limit: int | None = None,
-    ) -> list[QASample]:
-        """Load the PubHealthBench MCQ dataset.
-
-        Args:
-            split: Dataset split (`"test"`, `"reviewed"`, etc.).
-            limit: Maximum number of samples.
-
-        Returns:
-            List of MCQSample instances.
-        """
-        target_split = split or self.default_split
-        ds = load_dataset(self.hf_repo, split=target_split, streaming=True)
+    def _rows(self, split: str) -> Iterable[Any]:
+        ds = load_dataset(self.hf_repo, split=split, streaming=True)
         if self._category is not None:
             cat = self._category
             ds = ds.filter(lambda r: r.get("category") == cat)
-        if limit is not None:
-            ds = ds.take(limit)
-        result: list[QASample] = []
-        for idx, row in enumerate(ds):
-            sample = self._row_to_sample(idx, row, target_split)
-            if sample is not None:
-                result.append(sample)
-        return result
+        yield from ds
 
-    def _row_to_sample(self, idx: int, row: Any, split: str) -> MCQSample | None:
-        question_stem = (row.get("question") or "").strip()
-        if not question_stem:
-            return None
-        raw_options: list[Any] = row.get("options") or []
-        if not raw_options:
+    def _extract(self, idx: int, record: Any) -> ExtractedMCQ | None:
+        stem = (record.get("question") or "").strip()
+        raw_options: list[Any] = record.get("options") or []
+        if not stem or not raw_options:
             return None
         options = {chr(ord("A") + i): str(v) for i, v in enumerate(raw_options)}
-        answer_index = row.get("answer_index")
+        answer_index = record.get("answer_index")
         if answer_index is None:
             return None
         try:
-            answer_key = chr(ord("A") + int(answer_index))
+            key = chr(ord("A") + int(answer_index))
         except (ValueError, TypeError):
             return None
-        if answer_key not in options:
+        if key not in options:
             return None
-        answer_text = options[answer_key]
-
-        options_original: dict[str, str] | None = None
-        if self.shuffle_options:
-            shuffled, new_key, _ = shuffle_options(
-                options,
-                answer_key,
-                seed=self.shuffle_seed,
-                row_id=idx,
-            )
-            options_original = options
-            options = shuffled
-            answer_key = new_key
-            answer_text = options[answer_key]
-
-        question = format_mcq_prompt(question_stem, options)
-        return MCQSample(
-            sample_id=str(row.get("question_id", idx)),
-            question=question,
-            question_stem=question_stem,
+        return ExtractedMCQ(
+            question_stem=stem,
             options=options,
-            options_original=options_original,
-            answer_key=answer_key,
-            answer_text=answer_text,
-            answer=answer_key,
-            dataset=self.dataset_name,
-            split=split,
+            answer_keys=[key],
             metadata={
-                "question_id": row.get("question_id", ""),
-                "category": row.get("category", ""),
-                "source": row.get("source", ""),
+                "question_id": record.get("question_id", ""),
+                "category": record.get("category", ""),
+                "source": record.get("source", ""),
             },
+            sample_id=str(record.get("question_id", idx)),
         )

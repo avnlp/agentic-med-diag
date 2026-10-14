@@ -1,6 +1,8 @@
-"""Integration tests for CareQA open-ended reasoning dataset loader — loads real data.
+"""Integration tests for CareQA open-ended reasoning dataset loader.
 
-These tests require network access to HuggingFace Datasets.
+Covers open-ended sample invariants and split values on live data.
+
+These tests load live data from Hugging Face and need network access.
 """
 
 from __future__ import annotations
@@ -21,25 +23,25 @@ class TestCareQAReasoningDatasetIntegration:
 
     SAMPLE_LIMIT = 10
 
-    def test_load_5_samples(self):
-        """Loader streams real samples and returns OpenEndedSample instances."""
+    def test_load_samples(self):
+        """Test loading samples when a limit is specified."""
         samples = CareQAReasoningDataset().load(limit=5)
         assert 1 <= len(samples) <= 5
         assert all(isinstance(s, OpenEndedSample) for s in samples)
 
     def test_invariants(self):
-        """answer == reference_answer and required fields are populated."""
+        """Test the answer == reference_answer and required fields are populated."""
         samples = CareQAReasoningDataset().load(limit=self.SAMPLE_LIMIT)
         assert_openended_invariants(samples)
         assert_dataset_name(samples, "careqa_reasoning")
 
     def test_split_field(self):
-        """split field reflects the requested split."""
+        """Test that the split field reflects the requested split."""
         samples = CareQAReasoningDataset().load(limit=5)
         assert_split_value(samples, "test")
 
     def test_reasoning_chain_is_none(self):
-        """reasoning_chain is None for CareQA reasoning dataset."""
+        """Test that the reasoning_chain is None for CareQA reasoning dataset."""
         samples = CareQAReasoningDataset().load(limit=self.SAMPLE_LIMIT)
         for s in samples:
             assert s.reasoning_chain is None, (
@@ -47,17 +49,17 @@ class TestCareQAReasoningDatasetIntegration:
             )
 
     def test_metadata_has_subject(self):
-        """metadata contains 'subject' key."""
+        """Test that the metadata contains 'subject' key."""
         samples = CareQAReasoningDataset().load(limit=self.SAMPLE_LIMIT)
         for s in samples:
             assert "subject" in s.metadata, f"Sample {s.sample_id}: missing subject"
 
     def test_sample_ids_are_sequential(self):
-        """sample_id strings are sequential row indices starting from 0."""
+        """Test that sample_id strings are sequential row indices starting from 0."""
         samples = CareQAReasoningDataset().load(limit=self.SAMPLE_LIMIT)
         for i, s in enumerate(samples):
             assert s.sample_id == str(i)
 
     def test_limit_zero_returns_empty(self):
-        """limit=0 returns an empty list."""
+        """Test that limit=0 returns an empty list."""
         assert_limit_zero_returns_empty(CareQAReasoningDataset)

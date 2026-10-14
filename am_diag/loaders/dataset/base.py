@@ -1,17 +1,20 @@
 """Abstract base class for Question Answer dataset loaders.
 
 Loaders with custom split-mapping logic, multiple HF configs, or additional filtering
-override `load` directly.
+may wrap `load`, but must delegate to `super().load()` for the shared pipeline.
 """
 
 from __future__ import annotations
 
-from abc import ABC
+from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from typing import Any, ClassVar
 
 from datasets import load_dataset
 
-from am_diag.common.data_models import QASample
+from am_diag.common.data_models import ExtractedMCQ, MCQSample, QASample
+from am_diag.loaders.dataset.prompt import format_mcq_prompt
+from am_diag.loaders.dataset.shuffle_utils import shuffle_options
 
 
 class QADataset(ABC):
@@ -47,8 +50,8 @@ class QADataset(ABC):
     ) -> list[QASample]:
         """Load the dataset, returning a list of QASample instances.
 
-        Override this method for datasets that need split-mapping, multiple configs, or
-        extra filtering logic.
+        Subclasses may wrap this method for split-mapping or extra setup, but should
+        delegate to `super().load()`.
 
         Args:
             split: Dataset split to load. Defaults to `self.default_split`.
@@ -90,3 +93,130 @@ class QADataset(ABC):
     def __repr__(self) -> str:
         """Return a string representation of this dataset loader."""
         return f"{type(self).__name__}(dataset={self.dataset_name!r})"
+
+
+class MCQDataset(QADataset):
+    """Deep base for multiple-choice (MCQ) dataset loaders.
+
+    Owns the full MCQ pipeline as a template method: iterate rows -> extract ->
+    shuffle options -> enforce invariants -> format the prompt -> construct
+    `MCQSample`. Subclasses fill two holes:
+
+    - `_rows(split)`: iteration. The default loads a single HF config via
+      streaming; override it for multiple configs, subject loops, or filtering,
+      yielding records that may carry per-config provenance (e.g.
+      `(subject, row)` tuples).
+    - `_extract(idx, record)`: a pure per-row parse to `ExtractedMCQ`, or `None`
+      to skip the row.
+
+    No MCQ loader overrides `load()`; the shared shuffle-and-build logic lives
+    once in `_build_sample`.
+    """
+
+    def load(
+        self,
+        split: str | None = None,
+        limit: int | None = None,
+    ) -> list[QASample]:
+        """Load the dataset, returning a list of `MCQSample` instances.
+
+        Args:
+            split: Dataset split to load. Defaults to `self.default_split`.
+            limit: Maximum number of samples to return (counted after skips).
+
+        Returns:
+            List of parsed `MCQSample` instances (a `QASample` subtype).
+        """
+        target_split = split or self.default_split
+        out: list[QASample] = []
+        if limit is not None and limit <= 0:
+            return out
+        rows = iter(self._rows(target_split))
+        idx = 0
+        while limit is None or len(out) < limit:
+            try:
+                record = next(rows)
+            except StopIteration:
+                break
+            extracted = self._extract(idx, record)
+            if extracted is not None:
+                out.append(self._build_sample(idx, extracted, target_split))
+            idx += 1
+        return out
+
+    def _rows(self, split: str) -> Iterable[Any]:
+        """Yield raw records for the split.
+
+        The default loads a single HF config via streaming. Override for
+        multiple configs, subject loops, or row filtering.
+
+        Args:
+            split: The active split name.
+
+        Yields:
+            Raw records (HF row dicts, or tuples carrying provenance).
+        """
+        args = (
+            (self.hf_repo,)
+            if self.hf_config is None
+            else (self.hf_repo, self.hf_config)
+        )
+        yield from load_dataset(*args, split=split, streaming=True)
+
+    @abstractmethod
+    def _extract(self, idx: int, record: Any) -> ExtractedMCQ | None:
+        """Parse one record into an `ExtractedMCQ`, or `None` to skip it.
+
+        Args:
+            idx: Row index (used as fallback sample id).
+            record: A record yielded by `_rows`.
+
+        Returns:
+            An `ExtractedMCQ`, or `None` to skip this record.
+        """
+        raise NotImplementedError
+
+    def _build_sample(
+        self,
+        idx: int,
+        extracted: ExtractedMCQ,
+        split: str,
+    ) -> MCQSample:
+        """Shuffle, format, and construct the `MCQSample` for one extracted row.
+
+        Args:
+            idx: Row index, used as fallback id and as the shuffle row id unless
+                `extracted.row_id` is set.
+            extracted: The normalized, pre-shuffle row.
+            split: The requested split, recorded on the sample.
+
+        Returns:
+            The constructed `MCQSample`.
+        """
+        options = extracted.options
+        answer_keys = extracted.answer_keys
+        options_original: dict[str, str] | None = None
+        if self.shuffle_options:
+            options_original = options
+            options, answer_keys, _ = shuffle_options(
+                options,
+                answer_keys,
+                seed=self.shuffle_seed,
+                row_id=idx if extracted.row_id is None else extracted.row_id,
+            )
+        return MCQSample(
+            sample_id=extracted.sample_id or str(idx),
+            question=format_mcq_prompt(
+                extracted.question_stem,
+                options,
+                is_multi_answer=extracted.is_multi_answer,
+            ),
+            question_stem=extracted.question_stem,
+            options=options,
+            options_original=options_original,
+            answer_keys=answer_keys,
+            is_multi_answer=extracted.is_multi_answer,
+            dataset=self.dataset_name,
+            split=split,
+            metadata=extracted.metadata,
+        )

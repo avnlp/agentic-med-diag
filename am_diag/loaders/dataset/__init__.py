@@ -10,7 +10,7 @@ from am_diag.common.data_models import (
     RubricCriterion,
     RubricSample,
 )
-from am_diag.loaders.dataset.base import QADataset
+from am_diag.loaders.dataset.base import ExtractedMCQ, MCQDataset, QADataset
 from am_diag.loaders.dataset.careqa import CareQADataset
 from am_diag.loaders.dataset.careqa_reasoning import CareQAReasoningDataset
 from am_diag.loaders.dataset.healthbench import HealthBenchDataset
@@ -32,6 +32,8 @@ from am_diag.loaders.dataset.supergpqa_med import SuperGPQAMedDataset
 
 
 __all__ = [
+    "ExtractedMCQ",
+    "MCQDataset",
     "QADataset",
     "ConsensusCriterion",
     "ConversationTurn",

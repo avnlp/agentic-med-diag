@@ -1,6 +1,9 @@
-"""Integration tests for PubHealthBench freeform dataset loader — loads real data.
+"""Integration tests for PubHealthBench freeform dataset loader.
 
-These tests require network access to HuggingFace Datasets.
+Covers open-ended sample invariants, retrieved-context metadata, non-empty
+reference answers, and default-split behavior on live data.
+
+These tests load live data from Hugging Face and need network access.
 """
 
 from __future__ import annotations
@@ -23,21 +26,21 @@ class TestPubHealthBenchFreeformDatasetIntegration:
 
     SAMPLE_LIMIT = 10
 
-    def test_load_5_samples(self):
-        """Loader streams real PubHealthBench freeform samples."""
+    def test_load_samples(self):
+        """Test loading samples when a limit is specified."""
         samples = PubHealthBenchFreeformDataset().load(limit=5)
         assert 1 <= len(samples) <= 5
         assert all(isinstance(s, OpenEndedSample) for s in samples)
 
     def test_invariants(self):
-        """All samples have correct dataset, split, and non-empty question."""
+        """Test the answer == reference_answer and required fields are populated."""
         samples = PubHealthBenchFreeformDataset().load(limit=self.SAMPLE_LIMIT)
         assert_openended_invariants(samples)
         assert_dataset_name(samples, "pubhealthbench_freeform")
         assert_split_value(samples, "test")
 
     def test_reference_answer_populated(self):
-        """reference_answer is a non-empty string for all loaded samples."""
+        """Test that reference_answer is a non-empty string for all loaded samples."""
         samples = PubHealthBenchFreeformDataset().load(limit=self.SAMPLE_LIMIT)
         for s in samples:
             assert isinstance(s.reference_answer, str), (
@@ -46,7 +49,7 @@ class TestPubHealthBenchFreeformDatasetIntegration:
             assert s.reference_answer, f"Sample {s.sample_id}: empty reference_answer"
 
     def test_metadata_fields_populated(self):
-        """Metadata has question_id, category, source, retrieved_context_for_judge."""
+        """Test metadata has question_id, category, source, and retrieved_context."""
         samples = PubHealthBenchFreeformDataset().load(limit=self.SAMPLE_LIMIT)
         assert len(samples) > 0
         for s in samples:
@@ -61,17 +64,17 @@ class TestPubHealthBenchFreeformDatasetIntegration:
             assert s.metadata["question_id"], f"Sample {s.sample_id}: empty question_id"
 
     def test_retrieved_context_in_metadata(self):
-        """retrieved_context_for_judge is present in all samples."""
+        """Test that retrieved_context_for_judge is present in all samples."""
         samples = PubHealthBenchFreeformDataset().load(limit=self.SAMPLE_LIMIT)
         for s in samples:
             assert "retrieved_context_for_judge" in s.metadata
             assert isinstance(s.metadata["retrieved_context_for_judge"], str)
 
     def test_default_split_is_test(self):
-        """default_split is 'test'."""
+        """Test that default_split is 'test'."""
         loader = PubHealthBenchFreeformDataset()
         assert loader.default_split == "test"
 
     def test_limit_zero_returns_empty(self):
-        """limit=0 returns an empty list."""
+        """Test that limit=0 returns an empty list."""
         assert_limit_zero_returns_empty(PubHealthBenchFreeformDataset)
