@@ -47,8 +47,13 @@ class RelationType(str, Enum):
     pass
 
 # #########################################################################
-# Generated classes (12)
+# Generated classes (17)
 # #########################################################################
+
+class AnswerEquivalenceJudgement(BaseModel):
+    is_correct: bool
+    explanation: str
+    matched_reference: typing.Optional[str] = None
 
 class ClusterDeduplicationVerdict(BaseModel):
     duplicates: typing.List[str] = Field(description='Exact matches to items in the candidate set that mean the same thing as the item')
@@ -65,6 +70,11 @@ class CommunityReportOutput(BaseModel):
 class CypherQuery(BaseModel):
     cypher: str = Field(description='A valid read-only Cypher MATCH/RETURN query answering the question. No mutations.')
     reasoning: str = Field(description='One sentence: what the query finds and why this structure was chosen')
+
+class DiagnosisJudgement(BaseModel):
+    is_correct: bool
+    explanation: str
+    matched_diagnosis: typing.Optional[str] = None
 
 class ExtractedEntity(BaseModel):
     name: str = Field(description='Canonical name. Use generic/INN for drugs, HGNC symbol for genes.')
@@ -97,6 +107,17 @@ class MapKeyPoint(BaseModel):
 class MapResponse(BaseModel):
     points: typing.List["MapKeyPoint"]
 
+class ReasoningMatch(BaseModel):
+    reason_index: int
+    matched: bool
+    matched_statements: typing.List[str]
+    explanation: str
+
+class ReasoningRecallJudgement(BaseModel):
+    matches: typing.List["ReasoningMatch"]
+    recall_score: float
+    explanation: str
+
 class ReduceAnswer(BaseModel):
     answer: str = Field(description='Synthesized answer from all analyst reports')
     key_themes: typing.List[str] = Field(description='Major themes identified across communities')
@@ -107,6 +128,11 @@ class Resume(BaseModel):
     email: str
     experience: typing.List[str]
     skills: typing.List[str]
+
+class RubricCriterionJudgement(BaseModel):
+    criterion_id: typing.Optional[str] = None
+    criteria_met: bool
+    explanation: str
 
 class SamenessVerdict(BaseModel):
     areSameEntity: bool
