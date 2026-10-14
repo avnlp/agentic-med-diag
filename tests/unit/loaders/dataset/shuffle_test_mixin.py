@@ -22,6 +22,7 @@ class ShuffleTestMixin:
     loader_class: type | None = None
 
     def make_row(self, **overrides: Any) -> dict[str, Any]:
+        """Return a valid dataset row with the supplied field overrides."""
         raise NotImplementedError
 
     @property
@@ -40,6 +41,7 @@ class ShuffleTestMixin:
         raise NotImplementedError
 
     def test_shuffle_modifies_options_order(self, patch_load_dataset: Any) -> None:
+        """Verify shuffling changes options and records their original values."""
         kwargs = {**self._loader_kwargs, **self._shuffle_kwargs}
         samples = self._patch_and_load(patch_load_dataset, **kwargs)
         assert len(samples) == 1
@@ -50,17 +52,20 @@ class ShuffleTestMixin:
         self,
         patch_load_dataset: Any,
     ) -> None:
+        """Verify the correct answer text remains in the original options."""
         kwargs = {**self._loader_kwargs, **self._shuffle_kwargs}
         samples = self._patch_and_load(patch_load_dataset, **kwargs)
         assert samples[0].answer_text in samples[0].options_original.values()
 
     def test_shuffle_invariant_holds(self, patch_load_dataset: Any) -> None:
+        """Verify shuffled answer keys still identify the correct option text."""
         kwargs = {**self._loader_kwargs, **self._shuffle_kwargs}
         samples = self._patch_and_load(patch_load_dataset, **kwargs)
         assert samples[0].answer == samples[0].answer_key
         assert samples[0].answer_text == samples[0].options[samples[0].answer_key]
 
     def test_shuffle_deterministic_with_seed(self, patch_load_dataset: Any) -> None:
+        """Verify repeated loads with the same seed produce identical answers."""
         kwargs = {**self._loader_kwargs, **self._shuffle_kwargs}
         s1 = self._patch_and_load(patch_load_dataset, **kwargs)
         s2 = self._patch_and_load(patch_load_dataset, **kwargs)
