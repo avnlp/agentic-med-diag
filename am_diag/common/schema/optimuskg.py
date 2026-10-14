@@ -5,15 +5,14 @@ OptimusKG nodes use 10 ``input_label`` abbreviations and edges 27 structural
 and generates the ``GraphSchema`` used by the released-OptimusKG loader (and, as a
 subset, by future per-source subgraph loaders).
 
-The per-edge **semantic** relation (``Relation.type``, e.g. ``EXPRESSED_IN``,
-``TARGET``) lives in the gold ``relation`` column, which the loader maps to
-``type``, so the exact set of relation types is data-derived.
-``SEMANTIC_RELATIONS`` is populated once from the gold ``edges`` table and
-committed here; until then each structural label contributes a single placeholder
-type (the structural label with ``-`` replaced by ``_``).
+The per-edge **semantic** relation (``Relation.type``, e.g. ``EXPRESSION_PRESENT``,
+``INHIBITOR``) lives in the gold ``relation`` column, which the loader maps to
+``type``. ``SEMANTIC_RELATIONS`` lists the distinct values per structural label,
+enumerated from the Dataverse release 3.2 ``edges.parquet``. A structural label
+missing from the map contributes a single placeholder type (the structural label
+with ``-`` replaced by ``_``).
 Relation types are hints for text2cypher and ``allowed_pairs`` only; they do not
-affect ingestion (``setup_schema`` keys constraints on entity labels), so the
-placeholder is safe.
+affect ingestion (``setup_schema`` keys constraints on entity labels).
 """
 
 from __future__ import annotations
@@ -80,9 +79,77 @@ STRUCTURAL_LABELS: list[str] = [
 ]
 
 # Distinct semantic ``relation`` values per structural label, enumerated from the
-# gold ``edges`` table and pasted here. Empty means "use the structural-label
-# placeholder" (see module docstring).
-SEMANTIC_RELATIONS: dict[str, list[str]] = {}
+# ``edges.parquet`` of Dataverse release 3.2. Refresh this map when a release adds
+# relation values.
+SEMANTIC_RELATIONS: dict[str, list[str]] = {
+    "ANA-ANA": ["PARENT"],
+    "ANA-GEN": ["EXPRESSION_ABSENT", "EXPRESSION_PRESENT"],
+    "BPO-BPO": ["IS_A"],
+    "BPO-GEN": ["INTERACTS_WITH"],
+    "CCO-CCO": ["IS_A"],
+    "CCO-GEN": ["INTERACTS_WITH"],
+    "DIS-DIS": ["PARENT"],
+    "DIS-GEN": ["ASSOCIATED_WITH"],
+    "DIS-PHE": ["PHENOTYPE_PRESENT"],
+    "DRG-BPO": ["INDICATION"],
+    "DRG-DIS": ["CONTRAINDICATION", "INDICATION", "OFF_LABEL_USE"],
+    "DRG-DRG": ["PARENT", "SYNERGISTIC_INTERACTION"],
+    "DRG-GEN": [
+        "ACTIVATOR",
+        "AGONIST",
+        "ALLOSTERIC_ANTAGONIST",
+        "ANTAGONIST",
+        "ANTISENSE_INHIBITOR",
+        "BINDING_AGENT",
+        "BLOCKER",
+        "CARRIER",
+        "CROSS_LINKING_AGENT",
+        "DEGRADER",
+        "DISRUPTING_AGENT",
+        "ENZYME",
+        "EXOGENOUS_GENE",
+        "EXOGENOUS_PROTEIN",
+        "HYDROLYTIC_ENZYME",
+        "INHIBITOR",
+        "INVERSE_AGONIST",
+        "MODULATOR",
+        "NEGATIVE_ALLOSTERIC_MODULATOR",
+        "NEGATIVE_MODULATOR",
+        "OPENER",
+        "OTHER",
+        "PARTIAL_AGONIST",
+        "POSITIVE_ALLOSTERIC_MODULATOR",
+        "POSITIVE_MODULATOR",
+        "PROTEOLYTIC_ENZYME",
+        "RELEASING_AGENT",
+        "RNAI_INHIBITOR",
+        "STABILISER",
+        "SUBSTRATE",
+        "TARGET",
+        "TRANSPORTER",
+        "VACCINE_ANTIGEN",
+    ],
+    "DRG-PHE": [
+        "ADVERSE_DRUG_REACTION",
+        "ASSOCIATED_WITH",
+        "CONTRAINDICATION",
+        "INDICATION",
+        "OFF_LABEL_USE",
+    ],
+    "EXP-BPO": ["INTERACTS_WITH"],
+    "EXP-CCO": ["INTERACTS_WITH"],
+    "EXP-DIS": ["LINKED_TO"],
+    "EXP-EXP": ["PARENT"],
+    "EXP-GEN": ["INTERACTS_WITH"],
+    "EXP-MFN": ["INTERACTS_WITH"],
+    "GEN-GEN": ["INTERACTS_WITH"],
+    "MFN-GEN": ["INTERACTS_WITH"],
+    "MFN-MFN": ["IS_A"],
+    "PHE-GEN": ["ASSOCIATED_WITH"],
+    "PHE-PHE": ["PARENT"],
+    "PWY-GEN": ["INTERACTS_WITH"],
+    "PWY-PWY": ["PARENT"],
+}
 
 # Properties every structured relation may carry (queryable on the edge).
 _RELATION_PROPERTIES = ["undirected", "sources", "structural_label"]

@@ -1,8 +1,8 @@
 """Tests for the generated OptimusKG union schema.
 
-The schema is derived mechanically from the abbreviation map and the 27 structural
-edge labels; these assertions pin the label set, the endpoint derivation, and the
-structural-placeholder fallback used until semantic relations are enumerated.
+The schema is derived mechanically from the abbreviation map, the 27 structural
+edge labels, and the semantic relation values enumerated from the released data;
+these assertions pin the label set, the endpoint derivation, and the relation types.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ from __future__ import annotations
 from am_diag.common.schema.optimuskg import (
     ABBREV_TO_LABEL,
     OPTIMUSKG_SCHEMA,
+    SEMANTIC_RELATIONS,
     STRUCTURAL_LABELS,
     _endpoints,
 )
@@ -42,8 +43,19 @@ class TestOptimusKGSchema:
         for rt in OPTIMUSKG_SCHEMA.relation_types:
             assert rt.head_labels and rt.tail_labels
 
-    def test_placeholder_relation_per_structural_label(self) -> None:
-        """With no enumerated semantics, each structural label yields one type."""
-        assert len(OPTIMUSKG_SCHEMA.relation_types) == len(STRUCTURAL_LABELS)
-        types = {rt.type for rt in OPTIMUSKG_SCHEMA.relation_types}
-        assert "ANA_GEN" in types
+    def test_every_structural_label_has_semantic_relations(self) -> None:
+        """No structural label falls back to the placeholder relation type."""
+        assert set(SEMANTIC_RELATIONS) == set(STRUCTURAL_LABELS)
+        assert all(SEMANTIC_RELATIONS[label] for label in STRUCTURAL_LABELS)
+
+    def test_relation_types_are_the_released_semantic_values(self) -> None:
+        """Relation types carry real values, each scoped to its endpoint labels."""
+        by_type = {
+            (rt.type, rt.head_labels[0], rt.tail_labels[0])
+            for rt in OPTIMUSKG_SCHEMA.relation_types
+        }
+        assert ("EXPRESSION_PRESENT", "AnatomicalStructure", "Gene") in by_type
+        assert ("INDICATION", "Drug", "Disease") in by_type
+        assert ("CONTRAINDICATION", "Drug", "Disease") in by_type
+        assert ("INHIBITOR", "Drug", "Gene") in by_type
+        assert "ANA_GEN" not in {rt.type for rt in OPTIMUSKG_SCHEMA.relation_types}

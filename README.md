@@ -298,6 +298,30 @@ uv run am-diag qa --project clinical --datasets careqa,medqa --limit 10
 uv run am-diag jobs list
 ```
 
+#### Loading the OptimusKG release
+
+The `optimuskg` loader ingests the published [OptimusKG](https://github.com/mims-harvard/OptimusKG) graph directly, without chunking or extraction. First download `nodes.parquet` and `edges.parquet` from the Harvard Dataverse record (DOI `10.7910/DVN/IYNGEV`), or fetch them with the `optimuskg` client in a throwaway Python 3.12 environment, which prints their location:
+
+```bash
+uvx --python 3.12 --from optimuskg python -c "import optimuskg; print(optimuskg.get_file('nodes.parquet')); print(optimuskg.get_file('edges.parquet'))"
+```
+
+Then point the loader at the directory that holds both files. The loader needs no `--reference-dir`.
+
+```bash
+uv run am-diag ingest --graph med --source loader:optimuskg:<gold_dir> --finalize
+```
+
+The loader also reads the per-type layout (`nodes/` and `edges/` directories). In Python, pass `largest_connected_component=True` to `OptimusKGGraphLoader` to read the `largest_connected_component_*.parquet` files instead. Each edge keeps the relation OptimusKG selected as its `type`. When sources disagree, the edge also lists every relation any source asserted in `asserted_relations`, so a query can find drug-disease pairs where any source says `CONTRAINDICATION`:
+
+```cypher
+MATCH (d:Drug)-[r:RELATES_TO]->(x:Disease)
+WHERE 'CONTRAINDICATION' IN r.asserted_relations
+RETURN d.name, r.type, x.name
+```
+
+Ingesting a newer release onto a graph built from an older one leaves stale edges and properties behind. Use a new graph, or wipe the old one first, and then ingest again.
+
 ### Programmatic Usage
 
 ```python
