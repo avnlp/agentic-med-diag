@@ -73,6 +73,18 @@ class Neo4jTransaction:
         return await result.data()
 
 
+MAX_NEIGHBOR_DEPTH = 3
+_NEIGHBOR_LIMIT = 1000
+_RESERVED_PROPERTY_KEYS = frozenset({"id", "label", "labels"})
+
+
+def _reject_reserved_keys(props: dict[str, Any]) -> None:
+    """Raise ValueError if a patch touches structural properties."""
+    reserved = _RESERVED_PROPERTY_KEYS & props.keys()
+    if reserved:
+        raise ValueError(f"Cannot update reserved properties: {sorted(reserved)}")
+
+
 class Neo4jClient(GraphStore):
     """Async Neo4j client wrapping the official ``neo4j`` driver.
 
@@ -396,7 +408,9 @@ class Neo4jClient(GraphStore):
 
     async def get_entity(self, entity_id: str) -> dict[str, Any] | None:
         """Return one entity row ``{id, labels, props}`` or ``None`` if absent."""
-        rows = await self.execute_query(load("admin/get_entity"), {"id": entity_id})
+        rows = await self.execute_query(
+            load("admin/get_entity"), {"id": entity_id}, read_only=True
+        )
         return rows[0] if rows else None
 
     async def list_entities(
@@ -410,30 +424,42 @@ class Neo4jClient(GraphStore):
         return await self.execute_query(
             load("admin/list_entities"),
             {"cursor": cursor, "limit": limit, "label": label},
+            read_only=True,
         )
 
     async def entity_neighbors(
-        self, entity_id: str, depth: int = 1
+        self, entity_id: str, depth: int = 1, *, limit: int = _NEIGHBOR_LIMIT
     ) -> list[dict[str, Any]]:
-        """Return entity rows within ``depth`` RELATES_TO hops of ``entity_id``."""
+        """Return entity rows within ``depth`` RELATES_TO hops of ``entity_id``.
+
+        ``depth`` is clamped to ``1..MAX_NEIGHBOR_DEPTH`` and at most ``limit``
+        rows are returned.
+        """
+        bounded_depth = max(1, min(int(depth), MAX_NEIGHBOR_DEPTH))
+        # Variable-length bounds cannot be Cypher parameters, so the clamped
+        # integer is substituted into the template.
+        query = load("admin/entity_neighbors").replace("${depth}", str(bounded_depth))
         return await self.execute_query(
-            load("admin/entity_neighbors"), {"id": entity_id, "depth": depth}
+            query, {"id": entity_id, "limit": limit}, read_only=True
         )
 
     async def entity_relations(self, entity_id: str) -> list[dict[str, Any]]:
         """Return relation rows incident to ``entity_id`` (either direction)."""
         return await self.execute_query(
-            load("admin/entity_relations"), {"id": entity_id}
+            load("admin/entity_relations"), {"id": entity_id}, read_only=True
         )
 
     async def entity_chunks(self, entity_id: str) -> list[dict[str, Any]]:
         """Return chunk rows that mention ``entity_id`` via HAS_ENTITY."""
-        return await self.execute_query(load("admin/entity_chunks"), {"id": entity_id})
+        return await self.execute_query(
+            load("admin/entity_chunks"), {"id": entity_id}, read_only=True
+        )
 
     async def update_entity(
         self, entity_id: str, props: dict[str, Any]
     ) -> dict[str, Any] | None:
         """Patch an entity's semantic properties and return the updated row."""
+        _reject_reserved_keys(props)
         rows = await self.execute_query(
             load("admin/update_entity"), {"id": entity_id, "props": props}
         )
@@ -445,7 +471,9 @@ class Neo4jClient(GraphStore):
 
     async def get_relation(self, relation_id: str) -> dict[str, Any] | None:
         """Return one relation row or ``None`` if absent."""
-        rows = await self.execute_query(load("admin/get_relation"), {"id": relation_id})
+        rows = await self.execute_query(
+            load("admin/get_relation"), {"id": relation_id}, read_only=True
+        )
         return rows[0] if rows else None
 
     async def list_relations(
@@ -459,12 +487,14 @@ class Neo4jClient(GraphStore):
         return await self.execute_query(
             load("admin/list_relations"),
             {"cursor": cursor, "limit": limit, "type": relation_type},
+            read_only=True,
         )
 
     async def update_relation(
         self, relation_id: str, props: dict[str, Any]
     ) -> dict[str, Any] | None:
         """Patch a relation's semantic properties and return the updated row."""
+        _reject_reserved_keys(props)
         rows = await self.execute_query(
             load("admin/update_relation"), {"id": relation_id, "props": props}
         )
@@ -476,7 +506,9 @@ class Neo4jClient(GraphStore):
 
     async def get_chunk(self, chunk_id: str) -> dict[str, Any] | None:
         """Return one chunk row or ``None`` if absent."""
-        rows = await self.execute_query(load("admin/get_chunk"), {"id": chunk_id})
+        rows = await self.execute_query(
+            load("admin/get_chunk"), {"id": chunk_id}, read_only=True
+        )
         return rows[0] if rows else None
 
     async def list_chunks(
@@ -484,13 +516,15 @@ class Neo4jClient(GraphStore):
     ) -> list[dict[str, Any]]:
         """Return a keyset page of chunk rows ordered by ascending id."""
         return await self.execute_query(
-            load("admin/list_chunks"), {"cursor": cursor, "limit": limit}
+            load("admin/list_chunks"),
+            {"cursor": cursor, "limit": limit},
+            read_only=True,
         )
 
     async def get_community(self, community_id: str) -> dict[str, Any] | None:
         """Return one community row or ``None`` if absent."""
         rows = await self.execute_query(
-            load("admin/get_community"), {"id": community_id}
+            load("admin/get_community"), {"id": community_id}, read_only=True
         )
         return rows[0] if rows else None
 
@@ -499,7 +533,9 @@ class Neo4jClient(GraphStore):
     ) -> list[dict[str, Any]]:
         """Return a keyset page of community rows ordered by ascending id."""
         return await self.execute_query(
-            load("admin/list_communities"), {"cursor": cursor, "limit": limit}
+            load("admin/list_communities"),
+            {"cursor": cursor, "limit": limit},
+            read_only=True,
         )
 
 
