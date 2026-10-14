@@ -165,23 +165,28 @@ class Neo4jSettings(BaseSettings):
     """
 ```
 
-### Pipeline node or complex algorithm
+### Pipeline builder
 
 ```python
-async def normalize_node(state: ExtractionState) -> ExtractionState:
-    """Deduplicate and normalize extracted entities and relations per chunk.
+def build_search_pipeline(
+    config: RetrievalConfig | None = None,
+    checkpointer: Any | None = None,
+) -> Any:
+    """Build a compiled LangGraph StateGraph for search.
 
-    Collapses duplicate entity and relation keys within a chunk, merges
-    provenance, and filters low-confidence or too-short entities.
+    Wraps ``SearchEngine`` in a single-node graph so the agentic harness and
+    evaluation code can run the multi-strategy search through one interface.
 
     Args:
-        state: Pipeline state carrying per-chunk extraction results.
+        config: Retrieval configuration. Defaults to ``RetrievalConfig()``.
+        checkpointer: Optional LangGraph checkpointer.
 
     Returns:
-        Updated pipeline state with ``normalized_chunks`` populated.
+        A compiled graph that reads ``question`` and ``recipe`` from its state
+        and writes ``search_result``.
 
     Note:
-        Normalization is deterministic, makes no LLM calls, and is safe to
-        re-run on already-normalized state.
+        LangGraph is imported when the pipeline is built, not at module import.
+        An in-memory checkpointer is used when none is supplied.
     """
 ```

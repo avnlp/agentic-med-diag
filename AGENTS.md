@@ -152,7 +152,7 @@ Ask: would this break code that used the package last week?
 - Keep graph-construction and retrieval components storage-agnostic unless they are explicitly in a database adapter package.
 - Validate interpolated Neo4j labels and relationship types before formatting Cypher.
 - Do not put multi-line Cypher string literals in Python. Queries live in `.cypher` files under `am_diag/common/cypher/` and are loaded by the thin loader.
-- Settings classes subclass `pydantic_settings.BaseSettings`, load from the repo-root `.env`, and use clear environment prefixes such as `NEO4J_`, `QDRANT_`, `WEAVIATE_`, `EMBEDDING_`, `RETRIEVAL_`, and `AGENT_`.
+- Settings classes subclass `pydantic_settings.BaseSettings`, load from the repo-root `.env`, and use clear environment prefixes such as `NEO4J_`, `QDRANT_`, `WEAVIATE_`, `EXTRACTION_`, `RETRIEVAL_`, and `AGENT_`.
 - Wrap databases, external services, network I/O, and message queues when a project-native boundary is useful. Do not wrap stable utility or ML libraries merely to hide imports.
 - Use monkeypatching/mocking for OS calls, time, third-party SDKs, and test-only seams. Add explicit injection seams when tests would otherwise patch project internals.
 - Prefer dependency injection over monkeypatching project class attributes in tests. Monkeypatching third-party SDK boundaries is acceptable when it is the narrowest reliable test seam.
