@@ -1,7 +1,9 @@
 """Integration tests for HealthBench rubric-scored dataset loader.
 
-Covers variant routing (all/hard/consensus), rubric-tag parsing,
-consensus-criterion lookup, and parallel-list length invariants.
+Covers variant routing (all/hard/consensus) and rubric-list length invariants
+on live data.
+
+These tests load live data from Hugging Face and need network access.
 """
 
 from __future__ import annotations

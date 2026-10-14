@@ -105,6 +105,14 @@ class TestBuildSampleShuffle:
         assert s1.options == s2.options
         assert s1.answer_key == s2.answer_key
 
+    def test_seeded_shuffle_changes_option_order(self):
+        """Test that a seeded shuffle reorders options for some rows."""
+        e = _single()
+        orders = {
+            tuple(_build(e, shuffle=True, idx=i).options.values()) for i in range(20)
+        }
+        assert len(orders) > 1
+
     def test_anchor_option_stays_in_place(self):
         """Test that anchor options like 'None of the above' stay at D."""
         e = _single(

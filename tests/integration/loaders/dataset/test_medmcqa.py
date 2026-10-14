@@ -1,7 +1,9 @@
 """Integration tests for MedMCQA dataset loader.
 
-Covers cop-based answer mapping, choice_type metadata (single/multi),
-subject-name and topic-name preservation, and train-split loading.
+Covers MCQ invariants, option keys, split values, metadata keys, shuffling,
+and train-split loading on live data.
+
+These tests load live data from Hugging Face and need network access.
 """
 
 from __future__ import annotations

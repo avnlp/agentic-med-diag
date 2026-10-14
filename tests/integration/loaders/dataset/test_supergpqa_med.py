@@ -1,7 +1,9 @@
 """Integration tests for SuperGPQA-Med dataset loader.
 
-Covers discipline filtering (Medicine only), field/difficulty filters,
-up-to-10-letter answer validation, and shuffle invariants.
+Covers the Medicine discipline filter, option and answer-key invariants,
+metadata keys, and shuffling on live data.
+
+These tests load live data from Hugging Face and need network access.
 """
 
 from __future__ import annotations

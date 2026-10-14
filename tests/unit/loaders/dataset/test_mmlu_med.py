@@ -152,3 +152,13 @@ class TestMMLUMedDataset(ShuffleTestMixin):
         samples = MMLUMedDataset(subjects=["anatomy"]).load()
         assert len(samples) == 1
         assert samples[0].answer_key == expected_key
+
+    def test_ids_and_shuffle_stable_across_subject_selection(self, patch_load_dataset):
+        """Test that a subject's samples do not depend on other selected subjects."""
+        rows = [make_list_indexed_row(), make_list_indexed_row()]
+        patch_load_dataset("am_diag.loaders.dataset.mmlu_med", rows)
+        alone = MMLUMedDataset(subjects=["college_biology"]).load()
+        combined = MMLUMedDataset(subjects=["anatomy", "college_biology"]).load()
+        biology = [s for s in combined if s.metadata["subject"] == "college_biology"]
+        assert [s.sample_id for s in biology] == [s.sample_id for s in alone]
+        assert [s.options for s in biology] == [s.options for s in alone]

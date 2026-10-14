@@ -66,11 +66,11 @@ class MMLUProHealthDataset(MCQDataset):
         ds = ds.filter(_is_health)
         examples: list[MCQSample] = []
         for idx, row in enumerate(ds):
+            if len(examples) >= self._num_few_shot:
+                break
             extracted = self._extract(idx, row)
             if extracted is not None:
                 examples.append(self._build_sample(idx, extracted, "validation"))
-            if len(examples) >= self._num_few_shot:
-                break
         return examples
 
     def _rows(self, split: str) -> Iterable[Any]:

@@ -1,7 +1,9 @@
 """Integration tests for NEJM Diagnostic Reasoning dataset loader.
 
-Covers case-presentation mapping, specialty/metadata structure,
-split-config routing, and reasoning-chain population.
+Covers answer and field invariants, split values, sample IDs, metadata keys,
+and reasoning-chain presence on live data.
+
+These tests load live data from Hugging Face and need network access.
 """
 
 from __future__ import annotations

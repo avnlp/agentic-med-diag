@@ -24,6 +24,8 @@ class ExtractedMCQ:
         is_multi_answer: Whether the question expects multiple correct answers.
         metadata: Dataset-specific provenance for the sample.
         sample_id: Stable id for the row, or `None` to fall back to `str(idx)`.
+        row_id: Stable row number mixed into the shuffle seed, or `None` to use
+            the iteration index.
     """
 
     question_stem: str
@@ -32,6 +34,7 @@ class ExtractedMCQ:
     is_multi_answer: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
     sample_id: str | None = None
+    row_id: int | None = None
 
 
 class MCQSample(BaseModel):
@@ -66,9 +69,16 @@ class MCQSample(BaseModel):
 
     @model_validator(mode="after")
     def _check_answer_keys(self) -> MCQSample:
-        """Reject empty ``answer_keys`` or keys absent from ``options``."""
+        """Reject empty, duplicate, or unknown ``answer_keys``.
+
+        Multiple keys require ``is_multi_answer=True``.
+        """
         if not self.answer_keys:
             raise ValueError("answer_keys must be non-empty")
+        if len(set(self.answer_keys)) != len(self.answer_keys):
+            raise ValueError(f"answer_keys {self.answer_keys} contain duplicates")
+        if len(self.answer_keys) > 1 and not self.is_multi_answer:
+            raise ValueError("multiple answer_keys require is_multi_answer=True")
         missing = [k for k in self.answer_keys if k not in self.options]
         if missing:
             raise ValueError(

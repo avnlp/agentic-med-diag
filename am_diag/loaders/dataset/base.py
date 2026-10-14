@@ -1,7 +1,7 @@
 """Abstract base class for Question Answer dataset loaders.
 
 Loaders with custom split-mapping logic, multiple HF configs, or additional filtering
-override `load` directly.
+may wrap `load`, but must delegate to `super().load()` for the shared pipeline.
 """
 
 from __future__ import annotations
@@ -50,8 +50,8 @@ class QADataset(ABC):
     ) -> list[QASample]:
         """Load the dataset, returning a list of QASample instances.
 
-        Override this method for datasets that need split-mapping, multiple configs, or
-        extra filtering logic.
+        Subclasses may wrap this method for split-mapping or extra setup, but should
+        delegate to `super().load()`.
 
         Args:
             split: Dataset split to load. Defaults to `self.default_split`.
@@ -129,12 +129,19 @@ class MCQDataset(QADataset):
         """
         target_split = split or self.default_split
         out: list[QASample] = []
-        for idx, record in enumerate(self._rows(target_split)):
-            if limit is not None and len(out) >= limit:
+        if limit is not None and limit <= 0:
+            return out
+        rows = iter(self._rows(target_split))
+        idx = 0
+        while limit is None or len(out) < limit:
+            try:
+                record = next(rows)
+            except StopIteration:
                 break
             extracted = self._extract(idx, record)
             if extracted is not None:
                 out.append(self._build_sample(idx, extracted, target_split))
+            idx += 1
         return out
 
     def _rows(self, split: str) -> Iterable[Any]:
@@ -178,7 +185,8 @@ class MCQDataset(QADataset):
         """Shuffle, format, and construct the `MCQSample` for one extracted row.
 
         Args:
-            idx: Row index, mixed into the shuffle seed and used as fallback id.
+            idx: Row index, used as fallback id and as the shuffle row id unless
+                `extracted.row_id` is set.
             extracted: The normalized, pre-shuffle row.
             split: The requested split, recorded on the sample.
 
@@ -194,7 +202,7 @@ class MCQDataset(QADataset):
                 options,
                 answer_keys,
                 seed=self.shuffle_seed,
-                row_id=idx,
+                row_id=idx if extracted.row_id is None else extracted.row_id,
             )
         return MCQSample(
             sample_id=extracted.sample_id or str(idx),

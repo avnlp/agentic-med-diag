@@ -1,7 +1,8 @@
 """Integration tests for CareQA open-ended reasoning dataset loader.
 
-Covers open-ended sample invariants, reference-answer fallback behavior,
-and the careqa_en_open config routing.
+Covers open-ended sample invariants and split values on live data.
+
+These tests load live data from Hugging Face and need network access.
 """
 
 from __future__ import annotations

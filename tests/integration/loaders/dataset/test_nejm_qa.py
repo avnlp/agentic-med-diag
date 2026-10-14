@@ -1,7 +1,9 @@
 """Integration tests for NEJM Q&A dataset loader.
 
-Covers multi-answer parsing and invariants, specialty-split loading,
-shuffle with multi-answer key tracking, and inline option extraction.
+Covers multi-answer invariants, specialty-split loading, sample ID format,
+and shuffling with multi-answer key tracking on live data.
+
+These tests load live data from Hugging Face and need network access.
 """
 
 from __future__ import annotations

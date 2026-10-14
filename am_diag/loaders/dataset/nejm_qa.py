@@ -34,7 +34,7 @@ class NEJMQADataset(MCQDataset):
     hf_repo: ClassVar[str] = "nejm-ai-qa/exams"
     default_split: ClassVar[str] = "all"
 
-    def _rows(self, split: str) -> Iterable[tuple[str, Any]]:
+    def _rows(self, split: str) -> Iterable[tuple[str, int, Any]]:
         if split == "all":
             specialties = _SPECIALTIES
         elif split in _SPECIALTIES:
@@ -44,8 +44,8 @@ class NEJMQADataset(MCQDataset):
             raise ValueError(msg)
         for specialty in specialties:
             ds = load_dataset(self.hf_repo, "default", split=specialty, streaming=True)
-            for row in ds:
-                yield specialty, row
+            for row_idx, row in enumerate(ds):
+                yield specialty, row_idx, row
 
     def _extract_stem_and_options(
         self,
@@ -64,7 +64,7 @@ class NEJMQADataset(MCQDataset):
         return stem, options
 
     def _extract(self, idx: int, record: Any) -> ExtractedMCQ | None:
-        specialty, row = record
+        specialty, row_idx, row = record
         q_text = (row.get("question") or "").strip()
         if not q_text:
             return None
@@ -93,5 +93,6 @@ class NEJMQADataset(MCQDataset):
                 "answer_raw": answer_raw,
                 "answer_letters": answer_letters,
             },
-            sample_id=f"{specialty}_{idx}",
+            sample_id=f"{specialty}_{row_idx}",
+            row_id=row_idx,
         )

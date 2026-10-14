@@ -47,14 +47,14 @@ class MMLUMedDataset(MCQDataset):
         super().__init__(shuffle_options=shuffle_options, shuffle_seed=shuffle_seed)
         self._subjects = subjects if subjects is not None else list(_SUBJECTS)
 
-    def _rows(self, split: str) -> Iterable[tuple[str, Any]]:
+    def _rows(self, split: str) -> Iterable[tuple[str, int, Any]]:
         for subject in self._subjects:
             ds = load_dataset(self.hf_repo, subject, split=split, streaming=True)
-            for row in ds:
-                yield subject, row
+            for row_idx, row in enumerate(ds):
+                yield subject, row_idx, row
 
     def _extract(self, idx: int, record: Any) -> ExtractedMCQ | None:
-        subject, row = record
+        subject, row_idx, row = record
         stem = (row.get("question") or "").strip()
         choices: list[Any] = row.get("choices") or []
         if not stem or not choices:
@@ -74,5 +74,6 @@ class MMLUMedDataset(MCQDataset):
             options=options,
             answer_keys=[key],
             metadata={"subject": subject},
-            sample_id=f"{subject}_{idx}",
+            sample_id=f"{subject}_{row_idx}",
+            row_id=row_idx,
         )

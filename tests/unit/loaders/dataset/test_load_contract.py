@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import pytest
 
-from am_diag.common.data_models import MCQSample, QASample
+from am_diag.common.data_models import MCQSample, QASample, RARMedSample
 from am_diag.loaders.dataset.careqa import CareQADataset
 from am_diag.loaders.dataset.careqa_reasoning import CareQAReasoningDataset
 from am_diag.loaders.dataset.healthbench import HealthBenchDataset
@@ -410,6 +410,26 @@ class TestMCQLoadContract:
         samples = loader.load(split=split, limit=3)
         assert len(samples) <= 3
 
+    def test_limit_counts_only_valid_samples(self, patch_load_dataset):
+        """Test that limit counts samples kept after invalid rows are skipped."""
+        bad = {"question": "", "options": {}, "answer_idx": "A"}
+        good = {
+            "question": "Which drug?",
+            "options": {"A": "A", "B": "B", "C": "C", "D": "D"},
+            "answer_idx": "B",
+        }
+        patch_load_dataset(
+            "am_diag.loaders.dataset.base",
+            [bad, good, bad, good, good, good, good],
+        )
+        samples = MedQADataset(shuffle_options=False).load(limit=3)
+        assert len(samples) == 3
+
+    def test_zero_limit_returns_empty(self, patch_load_dataset):
+        """Test that limit=0 returns no samples."""
+        patch_load_dataset("am_diag.loaders.dataset.base", [])
+        assert MedQADataset(shuffle_options=False).load(limit=0) == []
+
     def test_sample_id_present(self, patch_load_dataset):
         """Test that all MCQ samples have a non-empty sample_id."""
         row = {
@@ -522,6 +542,9 @@ class TestFreeFormLoadContract:
         assert len(samples) == 1
         assert isinstance(samples[0], QASample)
         assert samples[0].dataset == expected_dataset
+        # RARMedSample does not carry a split field.
+        if not isinstance(samples[0], RARMedSample):
+            assert samples[0].split == split
 
     @pytest.mark.parametrize(
         "loader_cls,patch_target,row,split,kwargs",

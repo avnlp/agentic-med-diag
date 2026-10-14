@@ -1,7 +1,9 @@
 """Integration tests for PubHealthBench freeform dataset loader.
 
-Covers open-ended sample invariants, retrieved-context metadata,
-reference-answer derivation from options, and default-split behavior.
+Covers open-ended sample invariants, retrieved-context metadata, non-empty
+reference answers, and default-split behavior on live data.
+
+These tests load live data from Hugging Face and need network access.
 """
 
 from __future__ import annotations

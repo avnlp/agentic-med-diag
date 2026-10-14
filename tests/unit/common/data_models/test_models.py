@@ -72,6 +72,20 @@ class TestMCQSample:
         with pytest.raises(ValidationError):
             _make_mcq(answer_keys=[])
 
+    def test_rejects_duplicate_answer_keys(self):
+        """Verify duplicate answer_keys raises ValidationError."""
+        with pytest.raises(ValidationError):
+            _make_mcq(answer_keys=["A", "A"], is_multi_answer=True)
+
+    def test_rejects_multiple_keys_when_not_multi_answer(self):
+        """Verify several answer_keys without is_multi_answer raises ValidationError."""
+        with pytest.raises(ValidationError):
+            _make_mcq(
+                options={"A": "a", "B": "b"},
+                answer_keys=["A", "B"],
+                is_multi_answer=False,
+            )
+
     def test_rejects_key_absent_from_options(self):
         """Verify key not in options raises ValidationError."""
         with pytest.raises(ValidationError):
