@@ -70,14 +70,14 @@ class TestMapEvent:
         """Content-block chunks yield their text, not the list repr."""
         chunk = {
             "content": [
-                {"type": "text", "text": "hel"},
+                {"type": "text", "text": "wor"},
                 {"type": "tool_use", "id": "x"},
-                "lo",
+                "ds",
             ]
         }
         ev = map_event({"event": "on_chat_model_stream", "data": {"chunk": chunk}})
         assert isinstance(ev, TokenEvent)
-        assert ev.text == "hello"
+        assert ev.text == "words"
 
     def test_subagent_token_is_skipped(self):
         """Tokens from a nested subagent graph are not user-facing."""
