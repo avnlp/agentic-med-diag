@@ -7,6 +7,7 @@ import re
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from neo4j import RoutingControl
 
 from am_diag.common.data_models.knowledge_graph import KnowledgeGraph
 from am_diag.common.data_models.schema import EntityType, GraphSchema
@@ -23,11 +24,13 @@ _PATCH_TARGET = "am_diag.db.graph.neo4j.AsyncGraphDatabase.driver"
 
 @pytest.fixture
 def settings() -> Neo4jSettings:
+    """Return Neo4jSettings with dummy credentials for testing."""
     return Neo4jSettings(uri="bolt://localhost:7687", user="neo4j", password="pass")
 
 
 @pytest.fixture
 def mock_driver() -> MagicMock:
+    """Return a MagicMock configured as a Neo4j async driver."""
     driver = MagicMock()
     driver.close = AsyncMock()
     driver.verify_connectivity = AsyncMock()
@@ -37,16 +40,20 @@ def mock_driver() -> MagicMock:
 
 @pytest.fixture
 def client(settings: Neo4jSettings, mock_driver: MagicMock) -> Neo4jClient:
+    """Return a Neo4jClient with a patched driver for testing."""
     with patch(_PATCH_TARGET, return_value=mock_driver):
         return Neo4jClient(settings)
 
 
 class TestNeo4jClient:
+    """Tests for Neo4jClient query execution and lifecycle."""
+
     async def test_execute_query_returns_list_of_dicts(
         self,
         client: Neo4jClient,
         mock_driver: MagicMock,
     ) -> None:
+        """Verify execute_query returns a list of dicts from records."""
         record = MagicMock()
         record.data.return_value = {"name": "Alice", "age": 30}
         mock_result = MagicMock()
@@ -64,6 +71,7 @@ class TestNeo4jClient:
         client: Neo4jClient,
         mock_driver: MagicMock,
     ) -> None:
+        """Verify Cypher and parameters are forwarded to the driver."""
         mock_result = MagicMock()
         mock_result.records = []
         mock_driver.execute_query.return_value = mock_result
@@ -74,11 +82,42 @@ class TestNeo4jClient:
         assert call_args.kwargs["parameters_"] == {"id": "abc"}
         assert call_args.kwargs["database_"] == "neo4j"
 
+    async def test_execute_query_defaults_to_write_routing(
+        self,
+        client: Neo4jClient,
+        mock_driver: MagicMock,
+    ) -> None:
+        """Verify queries use write routing unless read-only is requested."""
+        mock_result = MagicMock()
+        mock_result.records = []
+        mock_driver.execute_query.return_value = mock_result
+
+        await client.execute_query("MATCH (n) RETURN n")
+
+        routing = mock_driver.execute_query.call_args.kwargs["routing_"]
+        assert routing == RoutingControl.WRITE
+
+    async def test_execute_query_read_only_uses_read_routing(
+        self,
+        client: Neo4jClient,
+        mock_driver: MagicMock,
+    ) -> None:
+        """Verify read_only routes the query as a read transaction."""
+        mock_result = MagicMock()
+        mock_result.records = []
+        mock_driver.execute_query.return_value = mock_result
+
+        await client.execute_query("MATCH (n) RETURN n", read_only=True)
+
+        routing = mock_driver.execute_query.call_args.kwargs["routing_"]
+        assert routing == RoutingControl.READ
+
     async def test_execute_query_returns_empty_list_on_no_results(
         self,
         client: Neo4jClient,
         mock_driver: MagicMock,
     ) -> None:
+        """Verify query with no results returns an empty list."""
         mock_result = MagicMock()
         mock_result.records = []
         mock_driver.execute_query.return_value = mock_result
@@ -92,6 +131,7 @@ class TestNeo4jClient:
         client: Neo4jClient,
         mock_driver: MagicMock,
     ) -> None:
+        """Verify query returning multiple records produces correct results."""
         records = [MagicMock(), MagicMock()]
         records[0].data.return_value = {"id": 1}
         records[1].data.return_value = {"id": 2}
@@ -108,6 +148,7 @@ class TestNeo4jClient:
         client: Neo4jClient,
         mock_driver: MagicMock,
     ) -> None:
+        """Verify close delegates to the underlying driver."""
         await client.close()
         mock_driver.close.assert_called_once()
 
@@ -116,6 +157,7 @@ class TestNeo4jClient:
         client: Neo4jClient,
         mock_driver: MagicMock,
     ) -> None:
+        """Verify health_check calls verify_connectivity and returns True."""
         result = await client.health_check()
         mock_driver.verify_connectivity.assert_called_once()
         assert result is True
@@ -125,6 +167,7 @@ class TestNeo4jClient:
         settings: Neo4jSettings,
         mock_driver: MagicMock,
     ) -> None:
+        """Verify async context manager closes the driver on exit."""
         with patch(_PATCH_TARGET, return_value=mock_driver):
             async with Neo4jClient(settings):
                 pass
@@ -135,6 +178,7 @@ class TestNeo4jClient:
         settings: Neo4jSettings,
         mock_driver: MagicMock,
     ) -> None:
+        """Verify async context manager returns the Neo4jClient instance."""
         with patch(_PATCH_TARGET, return_value=mock_driver):
             async with Neo4jClient(settings) as c:
                 assert isinstance(c, Neo4jClient)
@@ -144,11 +188,13 @@ class TestNeo4jClient:
         settings: Neo4jSettings,
         mock_driver: MagicMock,
     ) -> None:
+        """Verify default database name is 'neo4j'."""
         with patch(_PATCH_TARGET, return_value=mock_driver):
             c = Neo4jClient(settings)
         assert c._database == "neo4j"
 
     def test_custom_database_stored_on_client(self, mock_driver: MagicMock) -> None:
+        """Verify custom database name from settings is stored on the client."""
         settings = Neo4jSettings(
             uri="bolt://localhost:7687",
             user="u",
@@ -161,16 +207,20 @@ class TestNeo4jClient:
 
 
 class TestCreateNeo4jClient:
+    """Tests for create_neo4j_client factory function."""
+
     def test_returns_neo4j_client_instance(
         self,
         settings: Neo4jSettings,
         mock_driver: MagicMock,
     ) -> None:
+        """Verify create_neo4j_client returns a Neo4jClient instance."""
         with patch(_PATCH_TARGET, return_value=mock_driver):
             client = create_neo4j_client(settings)
         assert isinstance(client, Neo4jClient)
 
     def test_explicit_settings_used(self, mock_driver: MagicMock) -> None:
+        """Verify explicit settings are used when provided."""
         settings = Neo4jSettings(
             uri="bolt://custom:7687",
             user="u",
@@ -182,6 +232,7 @@ class TestCreateNeo4jClient:
         assert client._database == "db"
 
     def test_loads_settings_from_env_when_none(self, mock_driver: MagicMock) -> None:
+        """Verify settings are loaded from env when none are provided."""
         with patch(_PATCH_TARGET, return_value=mock_driver):
             client = create_neo4j_client()
         assert isinstance(client, Neo4jClient)
@@ -209,7 +260,10 @@ def mock_transaction(mock_driver: MagicMock):
 
 
 class TestTransaction:
+    """Tests for Neo4jClient.transaction context manager."""
+
     async def test_commits_on_success(self, client, mock_driver, mock_transaction):
+        """Verify successful transaction commits."""
         _, mock_tx = mock_transaction
         async with client.transaction():
             pass
@@ -217,6 +271,7 @@ class TestTransaction:
         mock_tx.rollback.assert_not_called()
 
     async def test_rolls_back_on_exception(self, client, mock_driver, mock_transaction):
+        """Verify transaction rolls back on exception."""
         _, mock_tx = mock_transaction
         with pytest.raises(RuntimeError):
             async with client.transaction():
@@ -230,10 +285,12 @@ class TestTransaction:
         mock_driver,
         mock_transaction,
     ):
+        """Verify transaction context yields a Neo4jTransaction instance."""
         async with client.transaction() as tx:
             assert isinstance(tx, Neo4jTransaction)
 
     async def test_tx_run_returns_records(self, client, mock_driver, mock_transaction):
+        """Verify Neo4jTransaction.run returns records."""
         mock_session, mock_tx = mock_transaction
         mock_result = AsyncMock()
         mock_result.data = AsyncMock(return_value=[{"id": 1}])
@@ -250,13 +307,17 @@ class TestTransaction:
         mock_driver,
         mock_transaction,
     ):
+        """Verify session uses the configured database name."""
         async with client.transaction():
             pass
         mock_driver.session.assert_called_once_with(database="neo4j")
 
 
 class TestExecuteBatch:
+    """Tests for Neo4jClient.execute_batch batching logic."""
+
     async def test_batch_splits_large_list(self, client, mock_driver):
+        """Verify large record lists are split into multiple batches."""
         mock_result = MagicMock()
         mock_result.records = []
         mock_driver.execute_query.return_value = mock_result
@@ -272,6 +333,7 @@ class TestExecuteBatch:
         assert mock_driver.execute_query.call_count == 3
 
     async def test_batch_sizes_are_correct(self, client, mock_driver):
+        """Verify each batch contains the expected number of records."""
         mock_result = MagicMock()
         mock_result.records = []
         mock_driver.execute_query.return_value = mock_result
@@ -289,10 +351,12 @@ class TestExecuteBatch:
         assert len(calls[2].kwargs["parameters_"]["records"]) == 200
 
     async def test_empty_records_is_noop(self, client, mock_driver):
+        """Verify empty records list results in no Cypher calls."""
         await client.execute_batch("UNWIND $records AS r MERGE (n {id: r.id})", [])
         mock_driver.execute_query.assert_not_called()
 
     async def test_under_batch_limit_single_call(self, client, mock_driver):
+        """Verify records under the batch limit make a single call."""
         mock_result = MagicMock()
         mock_result.records = []
         mock_driver.execute_query.return_value = mock_result
@@ -311,6 +375,7 @@ class TestCypherLoadedFromFiles:
     """Guard: verify no multi-line Cypher literal strings exist in db/*.py."""
 
     def test_no_embedded_cypher_in_neo4j_module(self):
+        """Verify db/*.py has no embedded multi-line Cypher strings."""
         import am_diag.db.graph.neo4j as module  # noqa: PLC0415
 
         src = inspect.getsource(module)
@@ -354,6 +419,7 @@ class TestWriteKnowledgeGraphOrdering:
     """Verify write_knowledge_graph: constraints then nodes then rels."""
 
     async def test_setup_schema_called_before_upserts(self, client, mock_driver):
+        """Verify setup_schema is called before all upsert operations."""
         mock_result = MagicMock()
         mock_result.records = []
         mock_driver.execute_query.return_value = mock_result
