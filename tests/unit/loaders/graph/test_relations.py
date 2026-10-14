@@ -9,12 +9,14 @@ from am_diag.loaders.graph.relations import collapse_relations
 from am_diag.loaders.graph.vocab import Source
 
 
-def _edges(*types: str, pair: tuple[str, str] = ("d1", "x1")) -> pl.DataFrame:
+def _edges(
+    *types: str, pair: tuple[str, str] = ("d1", "x1"), label: str = "DRG-DIS"
+) -> pl.DataFrame:
     return pl.DataFrame(
         {
             "from": [pair[0]] * len(types),
             "to": [pair[1]] * len(types),
-            "label": ["DRG-DIS"] * len(types),
+            "label": [label] * len(types),
             "type": list(types),
             "sources": [["DRUG_CENTRAL"]] * len(types),
         }
@@ -84,6 +86,36 @@ class TestCollapseRelations:
         assert out["from"].to_list() == ["d1", "d2"]
         assert out["type"].to_list() == ["INDICATION", "CONTRAINDICATION"]
         assert out["relation_conflict"].to_list() == [True, False]
+
+    def test_rows_are_ordered_by_from_then_to_then_label(self) -> None:
+        """Pairs that share a head are ordered by tail, then by structural label."""
+        shared_head = [
+            ("d1", "x3", "DRG-PHE"),
+            ("d1", "x1", "DRG-PHE"),
+            ("d1", "x2", "DRG-DIS"),
+            ("d1", "x3", "DRG-DIS"),
+            ("d1", "x1", "DRG-DIS"),
+            ("d1", "x2", "DRG-PHE"),
+        ]
+        edges = pl.concat(
+            [
+                _edges("INDICATION", pair=("d0", "x9")),
+                *[
+                    _edges("INDICATION", pair=(h, t), label=lb)
+                    for h, t, lb in shared_head
+                ],
+            ]
+        )
+        out = collapse_relations(edges, Source.DRUG_CENTRAL)
+        assert list(zip(out["from"], out["to"], out["label"], strict=True)) == [
+            ("d0", "x9", "DRG-DIS"),
+            ("d1", "x1", "DRG-DIS"),
+            ("d1", "x1", "DRG-PHE"),
+            ("d1", "x2", "DRG-DIS"),
+            ("d1", "x2", "DRG-PHE"),
+            ("d1", "x3", "DRG-DIS"),
+            ("d1", "x3", "DRG-PHE"),
+        ]
 
     def test_other_columns_are_carried_through(self) -> None:
         """Columns outside the pair keys and type survive the collapse."""
