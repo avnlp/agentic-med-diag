@@ -34,6 +34,3 @@ def build_chat_model(
         temperature=s.temperature,
         max_retries=5,
     )
-
-
-__all__ = ["build_chat_model"]

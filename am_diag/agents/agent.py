@@ -18,18 +18,19 @@ from am_diag.agents.subagents import (
     build_researcher_subagent,
     build_verifier_subagent,
 )
-from am_diag.retrieval.search import SearchEngine
+from am_diag.agents.tools import SearchProvider
 
 
 async def build_clinical_agent(
-    search_engine: SearchEngine | None = None,
+    search_engine: SearchProvider | None = None,
     settings: AgentSettings | None = None,
 ) -> Any:
     """Build and return a compiled DeepAgents clinical QA agent.
 
     Args:
-        search_engine: Configured ``SearchEngine`` for retrieval.
-            If ``None``, retrieval tools will not be available.
+        search_engine: A :class:`SearchProvider` (per-graph ``SearchEngine`` or
+            cross-graph ``FederatedSearch``). If ``None``, retrieval tools will
+            not be available.
         settings: ``AgentSettings``. Defaults to ``AgentSettings()``.
 
     Returns:
@@ -61,6 +62,3 @@ async def build_clinical_agent(
         subagents=subagent_configs,  # type: ignore
         response_format=ClinicalAnswer,
     )
-
-
-__all__ = ["build_clinical_agent"]

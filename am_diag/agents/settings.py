@@ -46,6 +46,3 @@ class AgentSettings(BaseSettings):
 
     # Evidence directory (virtual FS path for DeepAgents)
     request_evidence_dir: str = "/evidence"
-
-
-__all__ = ["AgentSettings"]

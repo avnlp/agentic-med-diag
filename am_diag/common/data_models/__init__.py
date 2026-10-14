@@ -16,6 +16,14 @@ from am_diag.common.data_models.agent import (
     SubQuestion,
     SufficientContext,
 )
+from am_diag.common.data_models.agent_events import (
+    AgentEvent,
+    FinalEvent,
+    PlanEvent,
+    TokenEvent,
+    ToolCallEvent,
+    VerifierEvent,
+)
 from am_diag.common.data_models.annotations import Dedup, Embeddable, LLMContext
 from am_diag.common.data_models.base import DataPoint
 from am_diag.common.data_models.chunk import Chunk
@@ -33,6 +41,7 @@ from am_diag.common.data_models.evaluation import (
 )
 from am_diag.common.data_models.knowledge_graph import KnowledgeGraph
 from am_diag.common.data_models.mcq import ExtractedMCQ, MCQSample
+from am_diag.common.data_models.message import Message
 from am_diag.common.data_models.metadata import MetaData
 from am_diag.common.data_models.provenance import Provenance
 from am_diag.common.data_models.qa import OpenEndedSample
@@ -52,6 +61,7 @@ from am_diag.common.data_models.vector_record import VectorHit, VectorRecord
 QASample = MCQSample | RubricSample | RARMedSample | OpenEndedSample
 
 __all__ = [
+    "AgentEvent",
     "AgentPlan",
     "Chunk",
     "ClinicalAnswer",
@@ -70,6 +80,7 @@ __all__ = [
     "EvidenceItem",
     "ExtractedMCQ",
     "ExtractorName",
+    "FinalEvent",
     "Finding",
     "GraphSchema",
     "ItemCluster",
@@ -77,9 +88,11 @@ __all__ = [
     "LLMContext",
     "MCQAccuracyResult",
     "MCQSample",
+    "Message",
     "MetaData",
     "MetricResult",
     "OpenEndedSample",
+    "PlanEvent",
     "Provenance",
     "QASample",
     "RARMedSample",
@@ -93,6 +106,9 @@ __all__ = [
     "SearchResult",
     "SubQuestion",
     "SufficientContext",
+    "TokenEvent",
+    "ToolCallEvent",
     "VectorHit",
     "VectorRecord",
+    "VerifierEvent",
 ]
