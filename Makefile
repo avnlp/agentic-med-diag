@@ -1,12 +1,10 @@
-.PHONY: sync test test-cov test-ci cov-report cov lint-typing lint-style lint-fmt lint-check lint-typos lint-all security-bandit security-audit security baml-gen clean help
+.PHONY: sync test test-integration cov-report cov lint-typing lint-style lint-fmt lint-check lint-typos lint-all security-bandit security-audit security baml-gen clean help
 
 help:
 	@echo "Available make targets:"
 	@echo "  make sync             - Sync project and install dependencies"
-	@echo "  make test             - Run unit tests"
+	@echo "  make test             - Run unit tests with coverage"
 	@echo "  make test-integration - Run integration tests (requires network)"
-	@echo "  make test-cov         - Run tests with coverage collection"
-	@echo "  make test-ci          - Run tests with coverage + XML/junit output for CI"
 	@echo "  make cov-report       - Generate coverage reports (xml, html)"
 	@echo "  make cov              - Run tests and generate coverage reports"
 	@echo "  make lint-typing      - Type check with ty"
@@ -24,26 +22,21 @@ sync:
 	uv sync --all-groups --all-extras
 
 test:
-	uv run pytest tests -m "not integration"
+	uv run pytest tests/unit \
+		--cov=am_diag \
+		--cov-report=term-missing \
+		--cov-report=xml \
+		--junitxml=pytest-results.xml -v
 
 test-integration:
-	uv run pytest tests -m "integration" -v -o "addopts="
-
-test-cov:
-	uv run pytest tests -m "not integration" --cov=am_diag --cov-report=term-missing
-
-test-ci:
-	uv run pytest tests -m "not integration" \
-		--cov=am_diag \
-		--cov-report=xml \
-		--cov-report=term-missing \
-		--junitxml=pytest-results.xml -v
+	uv run pytest tests/integration -v -n auto --dist loadscope \
+	    -o "addopts=--strict-markers --strict-config --disable-socket --allow-unix-socket -ra"
 
 cov-report:
 	uv run coverage xml
 	uv run coverage html
 
-cov: test-cov cov-report
+cov: test cov-report
 
 lint-typing:
 	uv run ty check am_diag/

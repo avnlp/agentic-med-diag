@@ -58,7 +58,8 @@ am_diag/
   agents/               # agentic clinical QA harness
   llm/                  # BAML sources and generated BAML client
 tests/
-  am_diag/              # tests mirroring the am_diag/ package
+  unit/                 # unit tests, no network
+  integration/          # integration tests with real external services
 ```
 
 Core data flow:
@@ -89,8 +90,7 @@ Use `uv` for environment and command execution. Standard commands are exposed as
 
 ```bash
 make sync                  # install all dependencies with uv sync
-make test                  # run unit tests (integration tests excluded)
-make test-cov              # run unit tests with coverage
+make test                  # run unit tests with coverage
 make test-integration      # run integration tests requiring external services
 make lint-fmt              # format and auto-fix with Ruff
 make lint-check            # check formatting and lint, no modifications
@@ -105,8 +105,8 @@ make clean                 # remove build artifacts and caches
 Run focused tests while iterating:
 
 ```bash
-uv run pytest tests/am_diag/db/graph/test_client.py::TestNeo4jClient -v
-uv run pytest tests/am_diag/db/vector/test_qdrant.py -k "search" -v
+uv run pytest tests/unit/db/graph/test_client.py::TestNeo4jClient -v
+uv run pytest tests/unit/db/vector/test_qdrant.py -k "search" -v
 ```
 
 Environment setup details are in @CONTRIBUTING.md. If a tool such as `uv`, `pytest`, `ruff`, or `ty` is missing, check for the repo `.venv`. If present, activate it and retry. If no environment exists, ask before installing or using alternate tooling.
@@ -120,7 +120,7 @@ Environment setup details are in @CONTRIBUTING.md. If a tool such as `uv`, `pyte
 - Use `snake_case` for functions and variables, `PascalCase` for classes, and `test_*.py` for tests.
 - Prefer descriptive names. Avoid abbreviations such as `ver` when `version` is clearer, or `rp` when `requires_python` is clearer.
 - Prefer top-level imports. Use local imports only when needed to avoid cycles, optional dependency import costs, or test-specific patching patterns already used nearby.
-- Respect the import layering: a module may import from its own layer or a lower one, never a higher one. From lowest to highest the layers are `common`, base contracts and settings, provider implementations (Neo4j, Qdrant, Weaviate, and the embedder and reranker backends), `graph_construction`, `retrieval`, `ingestion`, and `agents`. `tests/am_diag/test_import_rules.py` enforces this for the modules in its `LAYERS` table. Packages that are not in the table, such as `chunking`, `loaders`, and `pipelines`, are not checked.
+- Respect the import layering: a module may import from its own layer or a lower one, never a higher one. From lowest to highest the layers are `common`, base contracts and settings, provider implementations (Neo4j, Qdrant, Weaviate, and the embedder and reranker backends), `graph_construction`, `retrieval`, `ingestion`, and `agents`. `tests/unit/test_import_rules.py` enforces this for the modules in its `LAYERS` table. Packages that are not in the table, such as `chunking`, `loaders`, and `pipelines`, are not checked.
 - Add type hints to new and modified public APIs.
 - Prefer `TypedDict` over broad `dict`/`Mapping` when documenting structured dictionaries in code.
 - Keep state explicit. Do not dynamically add/read fields with `setattr` and `getattr` when normal attributes or models would be clearer.
@@ -204,7 +204,7 @@ Use the `writing-tests` skill before adding or changing tests.
 - Never delete or weaken a failing test to make the suite pass. Fix the code, or ask.
 - Do not add tests that merely restate the code, assert incidental mock call details, grep source or docs text as a substitute for checking behavior, compute the expected value with the code under test, or only keep a test-only export or seam alive. Explicit architecture guard tests and boundary-contract assertions are allowed.
 - Use `pytest` and `pytest-asyncio`; async tests do not need `@pytest.mark.asyncio`.
-- Tests mirror the `am_diag/` package under `tests/am_diag/`.
+- Tests mirror the `am_diag/` package under `tests/unit/` and `tests/integration/`.
 - Use one `Test<ClassName>` class per `test_<class>.py` file when practical.
 - Use descriptive behavior names such as `test_returns_empty_when_no_results`.
 - Use Arrange-Act-Assert structure.
@@ -221,18 +221,18 @@ Use the `writing-tests` skill before adding or changing tests.
 
 Unit tests cover isolated logic with real branches. Mock every external service.
 
-- Location: next to the mirrored module under `tests/am_diag/...`, in `test_<name>.py`.
+- Location: `tests/unit/...`.
 - No network access. Sockets are disabled by default.
 - Mock Neo4j, Qdrant, Weaviate, Hugging Face, LLM APIs, and other external services at the driver/API boundary.
 - If a unit test raises `SocketBlockedError`, fix the mock; do not enable network access.
 - For Neo4j unit tests, patch `am_diag.db.graph.neo4j.AsyncGraphDatabase.driver`.
-- Do not add `enable_socket` markers to unit tests.
+- Do not add manual `enable_socket` markers to unit tests.
 
 ### Integration tests
 
-- Location: next to the mirrored module under `tests/am_diag/...`, in `test_<name>_integration.py`.
-- Mark every integration test with both `@pytest.mark.integration` and `@pytest.mark.enable_socket`. `make test` excludes the `integration` marker; `make test-integration` selects it.
+- Location: `tests/integration/...`.
 - Use real external services only when integration behavior is under test.
+- `integration`, `enable_socket`, and flaky rerun markers are auto-applied by `tests/conftest.py`; do not add them manually.
 - Integration tests can rely on real environment variables or `.env`; do not commit secrets.
 
 ## Type checking
@@ -378,7 +378,7 @@ Before handing off non-trivial changes, check:
 - Do not introduce a `src/` layout.
 - Do not use `pip`, `poetry`, or `conda` for project dependency operations.
 - Do not use mypy; use `ty`.
-- Do not add `integration` or `enable_socket` markers to unit tests.
+- Do not add manual integration/socket markers that `tests/conftest.py` already auto-applies.
 - Do not enable sockets in unit tests to avoid mocking.
 - Do not manually edit generated BAML client code.
 - Do not commit secrets or `.env` files.

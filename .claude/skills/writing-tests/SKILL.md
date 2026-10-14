@@ -18,14 +18,14 @@ Use these rules for tests in this repository.
 ## Organization
 
 - Use `pytest` and `pytest-asyncio` for tests, including async tests.
-- Tests mirror the `am_diag/` package structure under `tests/am_diag/`.
-  Integration tests sit beside the unit tests in `test_<name>_integration.py`.
+- Tests mirror the `am_diag/` package structure under `tests/unit/` and
+  `tests/integration/`.
 - Use one `Test<Feature>` class per `test_<feature>.py` file when practical.
 - `pytest-asyncio` runs in auto mode. Do not add `@pytest.mark.asyncio` to async
   tests.
-- Pytest runs with `-m 'not integration'` by default, so integration tests run
-  only through `make test-integration`.
-- Tests run in parallel. Avoid shared mutable state between
+- `--strict-markers` and `--strict-config` are enabled. Marker typos and manual
+  marker misuse are hard errors.
+- Unit and integration tests run in parallel. Avoid shared mutable state between
   test classes.
 - Use descriptive, behavior-oriented test names such as
   `test_returns_empty_when_no_results`.
@@ -48,8 +48,9 @@ Use these rules for tests in this repository.
   fix the mock rather than enabling network access.
 - `pytest-socket` disables network by default with
   `--disable-socket --allow-unix-socket`.
-- Mark every integration test with both `@pytest.mark.integration` and
-  `@pytest.mark.enable_socket`. Do not add these markers to unit tests.
+- Integration tests automatically receive `integration`, `enable_socket`, and
+  `flaky(reruns=3, reruns_delay=30, rerun_except=[AssertionError])` markers from
+  `tests/conftest.py` based on directory. Do not add these markers manually.
 - Patch external drivers at the driver boundary used by production code.
 - For Neo4j unit tests, patch `am_diag.db.graph.neo4j.AsyncGraphDatabase.driver`.
 - Avoid shared mutable state between test classes because tests run in parallel.
@@ -75,4 +76,4 @@ Use these rules for tests in this repository.
 - Use focused pytest commands while iterating, then run the narrowest broader
   check that proves the change.
 - Example focused command:
-  `uv run pytest tests/am_diag/db/graph/test_client.py -k client`.
+  `uv run pytest tests/unit/db/graph/test_client.py -k client`.
