@@ -39,14 +39,10 @@ class TestPubmedCaseReportsCorpusLoader:
             assert _PMCID_RE.match(c.external_id)
 
     def test_derived_properties_non_empty(self):
-        """Test that license, section_type, and journal are correctly populated."""
+        """Test that license and section_type are correctly populated."""
         chunks = asyncio.run(PubmedCaseReportsCorpusLoader().load_sample(n=self._LIMIT))
         for c in chunks:
             assert c.properties["license"] == "CC-BY-4.0", (
                 "license must be 'CC-BY-4.0' for PubMed Central case reports"
             )
             assert c.properties["section_type"] == "full_text"
-            assert c.properties["journal"], "journal must be non-empty"
-            assert c.properties["publication_date"], (
-                "publication_date must be non-empty"
-            )

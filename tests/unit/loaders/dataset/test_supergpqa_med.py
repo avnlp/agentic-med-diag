@@ -8,6 +8,8 @@ import pytest
 
 from am_diag.loaders.dataset.supergpqa_med import SuperGPQAMedDataset
 
+from .shuffle_test_mixin import ShuffleTestMixin
+
 
 def make_list_letter_answer_row(**overrides: Any) -> dict[str, Any]:
     """Build a row with options as list and answer/answer_letter as a letter."""
@@ -25,8 +27,25 @@ def make_list_letter_answer_row(**overrides: Any) -> dict[str, Any]:
     return row
 
 
-class TestSuperGPQAMedDataset:
+class TestSuperGPQAMedDataset(ShuffleTestMixin):
     """Order: Edge/empty → Core behavior → Fallback → Fixtures."""
+
+    loader_class = SuperGPQAMedDataset
+
+    def make_row(self, **overrides: Any) -> dict[str, Any]:
+        """Return a valid Medicine-discipline row."""
+        row = make_list_letter_answer_row(discipline="Medicine", **overrides)
+        if "options" not in overrides:
+            row["options"] = ["Option A", "Option B", "Option C", "Option D"]
+        return row
+
+    def _patch_and_load(
+        self,
+        patch_load_dataset: Any,
+        **loader_kwargs: Any,
+    ) -> list[Any]:
+        patch_load_dataset("am_diag.loaders.dataset.supergpqa_med", [self.make_row()])
+        return self.loader_class(**loader_kwargs).load()
 
     def test_skips_row_with_empty_question(self, patch_load_dataset):
         """Test that row with empty question is filtered out during load."""

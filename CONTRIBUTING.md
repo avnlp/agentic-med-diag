@@ -28,7 +28,7 @@ The project uses [uv](https://github.com/astral-sh/uv) for dependency management
    uv run pre-commit install
    ```
 
-4. Copy the example environment file and add your credentials. Integration tests and the ingestion and QA commands need a Neo4j instance, a vector store (Qdrant or Weaviate), and an OpenAI-compatible LLM endpoint:
+4. Copy the example environment file and add your credentials. The ingestion and QA commands, and the integration tests for the graph, vector store, and LLM components, need a Neo4j instance, a vector store (Qdrant or Weaviate), and an OpenAI-compatible LLM endpoint. The corpus and dataset loader integration tests need only network access to Hugging Face:
 
    ```bash
    cp .env.example .env

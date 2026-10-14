@@ -8,6 +8,8 @@ import pytest
 
 from am_diag.loaders.dataset.pubhealthbench import PubHealthBenchDataset
 
+from .shuffle_test_mixin import ShuffleTestMixin
+
 
 def make_list_indexed_row(**overrides: Any) -> dict[str, Any]:
     """Build a row with options as list and answer_index as 0-indexed int."""
@@ -23,8 +25,22 @@ def make_list_indexed_row(**overrides: Any) -> dict[str, Any]:
     return row
 
 
-class TestPubHealthBenchDataset:
+class TestPubHealthBenchDataset(ShuffleTestMixin):
     """Tests for PubHealthBench extraction and answer validation."""
+
+    loader_class = PubHealthBenchDataset
+
+    def make_row(self, **overrides: Any) -> dict[str, Any]:
+        """Return a valid row for the shared shuffle tests."""
+        return make_list_indexed_row(**overrides)
+
+    def _patch_and_load(
+        self,
+        patch_load_dataset: Any,
+        **loader_kwargs: Any,
+    ) -> list[Any]:
+        patch_load_dataset("am_diag.loaders.dataset.pubhealthbench", [self.make_row()])
+        return self.loader_class(**loader_kwargs).load()
 
     def test_skips_row_with_empty_question(self, patch_load_dataset):
         """Test that row with empty question is filtered out during load."""

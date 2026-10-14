@@ -8,6 +8,8 @@ import pytest
 
 from am_diag.loaders.dataset.pubmedqa import _TEST_IDS, PubMedQADataset
 
+from .shuffle_test_mixin import ShuffleTestMixin
+
 
 def make_yes_no_maybe_row(**overrides: Any) -> dict[str, Any]:
     """Build a row with fixed Yes/No/Maybe options from final_decision."""
@@ -25,13 +27,27 @@ def make_yes_no_maybe_row(**overrides: Any) -> dict[str, Any]:
     return row
 
 
-class TestPubMedQADataset:
+class TestPubMedQADataset(ShuffleTestMixin):
     """Tests for PubMedQA extraction, context formatting, and split filtering.
 
     Note:
         All unit tests use ``split='train'`` to bypass the test-ID filter.
         The test split only accepts known pubids from ``_TEST_IDS``.
     """
+
+    loader_class = PubMedQADataset
+
+    def make_row(self, **overrides: Any) -> dict[str, Any]:
+        """Return a valid row for the shared shuffle tests."""
+        return make_yes_no_maybe_row(**overrides)
+
+    def _patch_and_load(
+        self,
+        patch_load_dataset: Any,
+        **loader_kwargs: Any,
+    ) -> list[Any]:
+        patch_load_dataset("am_diag.loaders.dataset.pubmedqa", [self.make_row()])
+        return self.loader_class(**loader_kwargs).load(split="train")
 
     def test_skips_row_with_empty_question(self, patch_load_dataset):
         """Test that row with empty question is filtered out during load."""

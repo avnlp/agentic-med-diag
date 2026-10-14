@@ -194,14 +194,16 @@ class TestCorpusStreamingContract:
         patch_corpus_load_dataset(_PATCH_TARGET, rows)
         loader = loader_cls()
 
-        async def _run():
+        async def _run(**kwargs: Any):
             chunks: list[Any] = []
-            async for batch in loader.astream(batch_size=100, offset=2):
+            async for batch in loader.astream(batch_size=100, **kwargs):
                 chunks.extend(batch)
             return chunks
 
-        chunks = asyncio.run(_run())
-        assert len(chunks) == _N_ROWS - 2
+        all_ids = [c.external_id for c in asyncio.run(_run())]
+        offset_ids = [c.external_id for c in asyncio.run(_run(offset=2))]
+        assert len(set(all_ids)) == _N_ROWS
+        assert offset_ids == all_ids[2:]
 
     # ------------------------------------------------------------------
     # source literal

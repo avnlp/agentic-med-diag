@@ -11,7 +11,7 @@ import re
 from am_diag.loaders.corpus.pubmed import PubMedCorpusLoader
 
 
-_PUBMED_ID_RE = re.compile(r"^pubmed\w+_\d+$")
+_PUBMED_ID_RE = re.compile(r"^pubmed-\w+-\d+$")
 
 
 class TestPubMedCorpusLoader:

@@ -5,8 +5,6 @@ These tests require network access to HuggingFace Datasets.
 
 from __future__ import annotations
 
-import pytest
-
 from am_diag.common.data_models import MCQSample
 from am_diag.loaders.dataset.medmcqa import MedMCQADataset
 
@@ -19,9 +17,6 @@ from .helpers import (
     assert_shuffle_works,
     assert_split_value,
 )
-
-
-pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 
 class TestMedMCQADatasetIntegration:

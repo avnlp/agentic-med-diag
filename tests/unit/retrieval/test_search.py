@@ -80,6 +80,10 @@ class TestSearchEngine:
 
         results = await engine.search("query", recipe="hybrid_rrf")
         assert results == []
+        engine._entity.retrieve.assert_awaited_once()
+        engine._relation.retrieve.assert_awaited_once()
+        engine._chunk.retrieve.assert_awaited_once()
+        engine._community.retrieve.assert_awaited_once()
 
     async def test_search_fuses_results(self, engine: SearchEngine) -> None:
         """Verify results from multiple retrievers are fused into a single list."""

@@ -11,7 +11,7 @@ import re
 from am_diag.loaders.corpus.textbooks import TextbooksCorpusLoader
 
 
-_TEXTBOOKS_ID_RE = re.compile(r"^.+_\d+$")
+_TEXTBOOKS_ID_RE = re.compile(r"^textbooks-.+_\d+$")
 
 
 class TestTextbooksCorpusLoader:

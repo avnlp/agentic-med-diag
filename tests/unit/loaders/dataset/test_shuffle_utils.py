@@ -291,6 +291,12 @@ class TestShuffleOptions:
             "Some of these",
             "All of the above statements",
             "None of the above options",
+            "None of the following",
+            "Both of these",
+            "Some of the options",
+            "All of the choices",
+            "Neither of them",
+            "All of the statements",
         ],
     )
     def test_anchor_pattern_matches(self, anchor_text: str) -> None:

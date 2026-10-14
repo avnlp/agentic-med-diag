@@ -60,6 +60,13 @@ class TestNEJMDiagnosticDataset:
         """Test that the default split is 'nejm_test'."""
         assert NEJMDiagnosticDataset.default_split == "nejm_test"
 
+    def test_limit_caps_loaded_samples(self, patch_load_dataset):
+        """Test that load(limit=N) returns at most N samples."""
+        rows = [self._make_row_with_title() for _ in range(10)]
+        patch_load_dataset("am_diag.loaders.dataset.nejm_diagnostic", rows)
+        samples = NEJMDiagnosticDataset().load(limit=5)
+        assert len(samples) == 5
+
     def test_unknown_config_raises(self):
         """Test that unknown split config raises ValueError."""
         with pytest.raises(ValueError, match="Unknown config"):

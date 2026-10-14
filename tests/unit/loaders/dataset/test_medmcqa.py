@@ -8,6 +8,8 @@ import pytest
 
 from am_diag.loaders.dataset.medmcqa import MedMCQADataset
 
+from .shuffle_test_mixin import ShuffleTestMixin
+
 
 def make_column_options_row(**overrides: Any) -> dict[str, Any]:
     """Build a row with options in separate columns (opa/opb/opc/opd)."""
@@ -28,8 +30,22 @@ def make_column_options_row(**overrides: Any) -> dict[str, Any]:
     return row
 
 
-class TestMedMCQADataset:
+class TestMedMCQADataset(ShuffleTestMixin):
     """Tests for MedMCQA extraction and metadata fields."""
+
+    loader_class = MedMCQADataset
+
+    def make_row(self, **overrides: Any) -> dict[str, Any]:
+        """Return a valid row for the shared shuffle tests."""
+        return make_column_options_row(**overrides)
+
+    def _patch_and_load(
+        self,
+        patch_load_dataset: Any,
+        **loader_kwargs: Any,
+    ) -> list[Any]:
+        patch_load_dataset("am_diag.loaders.dataset.base", [self.make_row()])
+        return self.loader_class(**loader_kwargs).load()
 
     def test_all_four_options_empty_returns_none(self, patch_load_dataset):
         """Test that row with all four options empty produces no sample."""

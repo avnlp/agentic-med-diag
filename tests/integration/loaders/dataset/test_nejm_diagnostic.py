@@ -5,8 +5,6 @@ These tests require network access to HuggingFace Datasets.
 
 from __future__ import annotations
 
-import pytest
-
 from am_diag.common.data_models import OpenEndedSample
 from am_diag.loaders.dataset.nejm_diagnostic import NEJMDiagnosticDataset
 
@@ -16,9 +14,6 @@ from .helpers import (
     assert_openended_invariants,
     assert_split_value,
 )
-
-
-pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 
 class TestNEJMDiagnosticDatasetIntegration:

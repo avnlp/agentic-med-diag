@@ -7,6 +7,8 @@ from typing import Any
 from am_diag.common.data_models import MCQSample
 from am_diag.loaders.dataset.mmlu_pro_health import MMLUProHealthDataset
 
+from .shuffle_test_mixin import ShuffleTestMixin
+
 
 def make_list_letter_answer_row(**overrides: Any) -> dict[str, Any]:
     """Build a row with options as list and answer/answer_letter as a letter."""
@@ -24,8 +26,22 @@ def make_list_letter_answer_row(**overrides: Any) -> dict[str, Any]:
     return row
 
 
-class TestMMLUProHealthDataset:
+class TestMMLUProHealthDataset(ShuffleTestMixin):
     """Tests for MMLU-Pro Health extraction and category routing."""
+
+    loader_class = MMLUProHealthDataset
+
+    def make_row(self, **overrides: Any) -> dict[str, Any]:
+        """Return a valid row for the shared shuffle tests."""
+        return make_list_letter_answer_row(category="health", **overrides)
+
+    def _patch_and_load(
+        self,
+        patch_load_dataset: Any,
+        **loader_kwargs: Any,
+    ) -> list[Any]:
+        patch_load_dataset("am_diag.loaders.dataset.mmlu_pro_health", [self.make_row()])
+        return self.loader_class(**loader_kwargs).load()
 
     def test_skips_row_with_empty_question(self, patch_load_dataset):
         """Test that row with empty question is filtered out during load."""

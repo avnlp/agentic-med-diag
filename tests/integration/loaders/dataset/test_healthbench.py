@@ -5,8 +5,6 @@ These tests require network access to HuggingFace Datasets.
 
 from __future__ import annotations
 
-import pytest
-
 from am_diag.common.data_models import (
     ConsensusCriterion,
     ConversationTurn,
@@ -16,9 +14,6 @@ from am_diag.common.data_models import (
 from am_diag.loaders.dataset.healthbench import HealthBenchDataset
 
 from .helpers import assert_dataset_name, assert_limit_zero_returns_empty
-
-
-pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 
 class TestHealthBenchDatasetIntegration:

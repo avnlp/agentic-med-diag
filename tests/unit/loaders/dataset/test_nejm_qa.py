@@ -8,6 +8,8 @@ import pytest
 
 from am_diag.loaders.dataset.nejm_qa import NEJMQADataset
 
+from .shuffle_test_mixin import ShuffleTestMixin
+
 
 def make_mcq_row(**overrides: Any) -> dict[str, Any]:
     """Return a default NEJM QA row dict for testing, merged with overrides."""
@@ -19,8 +21,22 @@ def make_mcq_row(**overrides: Any) -> dict[str, Any]:
     return row
 
 
-class TestNEJMQADataset:
+class TestNEJMQADataset(ShuffleTestMixin):
     """Tests for NEJM QA extraction and specialty-split loading."""
+
+    loader_class = NEJMQADataset
+
+    def make_row(self, **overrides: Any) -> dict[str, Any]:
+        """Return a valid row for the shared shuffle tests."""
+        return make_mcq_row(**overrides)
+
+    def _patch_and_load(
+        self,
+        patch_load_dataset: Any,
+        **loader_kwargs: Any,
+    ) -> list[Any]:
+        patch_load_dataset("am_diag.loaders.dataset.nejm_qa", [self.make_row()])
+        return self.loader_class(**loader_kwargs).load(split="pediatrics")
 
     def test_skips_row_with_empty_question(
         self,

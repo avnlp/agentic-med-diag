@@ -33,6 +33,7 @@ test-integration:
 	    -o "addopts=--strict-markers --strict-config --disable-socket --allow-unix-socket -ra"
 
 cov-report:
+	uv run coverage xml
 	uv run coverage html
 
 cov: test cov-report

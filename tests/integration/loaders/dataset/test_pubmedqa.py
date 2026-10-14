@@ -7,8 +7,6 @@ from __future__ import annotations
 
 from collections import Counter
 
-import pytest
-
 from am_diag.common.data_models import MCQSample
 from am_diag.loaders.dataset.pubmedqa import PubMedQADataset
 
@@ -21,9 +19,6 @@ from .helpers import (
     assert_shuffle_works,
     assert_split_value,
 )
-
-
-pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
 
 class TestPubMedQADatasetIntegration:

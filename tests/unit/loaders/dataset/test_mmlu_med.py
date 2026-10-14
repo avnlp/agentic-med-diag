@@ -8,6 +8,8 @@ import pytest
 
 from am_diag.loaders.dataset.mmlu_med import MMLUMedDataset
 
+from .shuffle_test_mixin import ShuffleTestMixin
+
 
 def make_list_indexed_row(**overrides: Any) -> dict[str, Any]:
     """Build a row with choices as list and answer as 0-indexed int."""
@@ -20,8 +22,26 @@ def make_list_indexed_row(**overrides: Any) -> dict[str, Any]:
     return row
 
 
-class TestMMLUMedDataset:
+class TestMMLUMedDataset(ShuffleTestMixin):
     """Tests for MMLU-Med extraction and subject filtering."""
+
+    loader_class = MMLUMedDataset
+
+    def make_row(self, **overrides: Any) -> dict[str, Any]:
+        """Return a valid row for the shared shuffle tests."""
+        return make_list_indexed_row(**overrides)
+
+    @property
+    def _loader_kwargs(self) -> dict[str, Any]:
+        return {"subjects": ["anatomy"]}
+
+    def _patch_and_load(
+        self,
+        patch_load_dataset: Any,
+        **loader_kwargs: Any,
+    ) -> list[Any]:
+        patch_load_dataset("am_diag.loaders.dataset.mmlu_med", [self.make_row()])
+        return self.loader_class(**loader_kwargs).load()
 
     def test_skips_row_with_empty_question(self, patch_load_dataset):
         """Test that row with empty question is filtered out during load."""
@@ -68,13 +88,17 @@ class TestMMLUMedDataset:
         samples = MMLUMedDataset(subjects=["anatomy"]).load()
         assert len(samples) == 0
 
-    def test_correct_hf_repo_and_split_called(self, patch_load_dataset):
-        """Test that load runs without error for the default MMLU-Med split."""
-        patch_load_dataset(
-            "am_diag.loaders.dataset.mmlu_med", [make_list_indexed_row()]
+    def test_correct_hf_repo_and_split_called(self, make_iterable_dataset, mocker):
+        """Test that load_dataset receives the repo, subject, and default split."""
+        mock_load = mocker.patch(
+            "am_diag.loaders.dataset.mmlu_med.load_dataset",
+            return_value=make_iterable_dataset([make_list_indexed_row()]),
         )
         samples = MMLUMedDataset(subjects=["anatomy"]).load()
         assert len(samples) == 1
+        mock_load.assert_called_once_with(
+            "cais/mmlu", "anatomy", split="test", streaming=True
+        )
 
     def test_metadata_fields_populated(self, patch_load_dataset):
         """Test that subject field is stored in sample metadata."""
