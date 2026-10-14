@@ -76,10 +76,10 @@ description: Fix ty type-check failures. Use when make lint-typing or uv run ty 
       # BAD: ty can't narrow through chained calls
       result = func(return_dict=True).to(device)["input_ids"]
 
-      # GOOD: split, narrow, then chain
+      # GOOD: split, narrow to the actual type, then chain
       result = func(return_dict=True)
-      if not hasattr(result, "to"):
-          raise TypeError("Expected dict-like result")
+      if not isinstance(result, BatchEncoding):
+          raise TypeError("Expected BatchEncoding")
       inputs = result.to(device)["input_ids"]
       ```
 
@@ -113,22 +113,20 @@ description: Fix ty type-check failures. Use when make lint-typing or uv run ty 
 
    g. **Make container classes generic to propagate value types**.
       When a class like `UserDict` holds values whose type changes after
-      transformation (e.g. lists → tensors after `.to()`), make the class
-      generic so methods can return narrowed types:
+      transformation (e.g. lists → tensors after `.to()`), specialize the base
+      class with a type variable so methods can return narrowed types:
       ```python
-      from typing import Any, Generic, overload
+      from collections import UserDict
+      from typing import Any
       from typing_extensions import TypeVar
 
       _V = TypeVar("_V", default=Any)  # default=Any keeps existing code working
 
-      class MyDict(UserDict, Generic[_V]):
-          @overload
-          def __getitem__(self, item: str) -> _V: ...
-          # ...
-
+      class MyDict(UserDict[str, _V]):
           def to(self, device) -> "MyDict[torch.Tensor]":
-              # after .to(), values are tensors
-              return MyDict({key: value.to(device) for key, value in self.items()})
+              # after .to(), values are tensors; to_tensor is the project's
+              # own typed conversion function
+              return MyDict({key: to_tensor(value, device) for key, value in self.items()})
       ```
       The `default=Any` (from `typing_extensions`) means unparameterized usage
       like `MyDict()` stays `MyDict[Any]` — no existing code needs to change.

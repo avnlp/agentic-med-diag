@@ -120,7 +120,7 @@ Environment setup details are in @CONTRIBUTING.md. If a tool such as `uv`, `pyte
 - Use `snake_case` for functions and variables, `PascalCase` for classes, and `test_*.py` for tests.
 - Prefer descriptive names. Avoid abbreviations such as `ver` when `version` is clearer, or `rp` when `requires_python` is clearer.
 - Prefer top-level imports. Use local imports only when needed to avoid cycles, optional dependency import costs, or test-specific patching patterns already used nearby.
-- Respect the import layering: a module may import from its own layer or a lower one, never a higher one. From lowest to highest the layers are `common`, base contracts, provider implementations, `graph_construction`, `retrieval`, `ingestion`, and `agents`. `tests/am_diag/test_import_rules.py` enforces this.
+- Respect the import layering: a module may import from its own layer or a lower one, never a higher one. From lowest to highest the layers are `common`, base contracts and settings, provider implementations (Neo4j, Qdrant, Weaviate, and the embedder and reranker backends), `graph_construction`, `retrieval`, `ingestion`, and `agents`. `tests/am_diag/test_import_rules.py` enforces this for the modules in its `LAYERS` table. Packages that are not in the table, such as `chunking`, `loaders`, and `pipelines`, are not checked.
 - Add type hints to new and modified public APIs.
 - Prefer `TypedDict` over broad `dict`/`Mapping` when documenting structured dictionaries in code.
 - Keep state explicit. Do not dynamically add/read fields with `setattr` and `getattr` when normal attributes or models would be clearer.

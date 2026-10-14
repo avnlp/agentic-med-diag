@@ -136,6 +136,10 @@ class Entity(DataPoint):
         name: Surface-form name as extracted from source text.
         label: Medical entity type from the schema, such as ``Disease`` or
             ``Drug``.
+        description: Optional text description, included in LLM context.
+        score: Extraction score. Defaults to ``1.0``.
+        schema_properties: Schema-defined properties for the entity type,
+            merged when duplicate entities are aggregated.
         canonical_name: Resolved canonical identifier, or ``None`` before the
             resolve stage.
         aliases: Known alternate names.
@@ -143,8 +147,8 @@ class Entity(DataPoint):
             and character offsets.
 
     Note:
-        Entities below the configured confidence threshold are filtered during
-        normalization and do not reach aggregation or resolution.
+        Entities scoring below the configured ``min_entity_score`` are filtered
+        during normalization and do not reach aggregation or resolution.
     """
 ```
 
@@ -170,6 +174,10 @@ class Neo4jSettings(BaseSettings):
 ```python
 def build_search_pipeline(
     config: RetrievalConfig | None = None,
+    vector_store: VectorStoreBase | None = None,
+    graph_store: GraphStore | None = None,
+    embedder: Embedder | None = None,
+    reranker: Reranker | None = None,
     checkpointer: Any | None = None,
 ) -> Any:
     """Build a compiled LangGraph StateGraph for search.
@@ -179,6 +187,10 @@ def build_search_pipeline(
 
     Args:
         config: Retrieval configuration. Defaults to ``RetrievalConfig()``.
+        vector_store: Vector store backend passed to ``SearchEngine``.
+        graph_store: Graph database client passed to ``SearchEngine``.
+        embedder: Embedder passed to ``SearchEngine``.
+        reranker: Optional cross-encoder reranker.
         checkpointer: Optional LangGraph checkpointer.
 
     Returns:
