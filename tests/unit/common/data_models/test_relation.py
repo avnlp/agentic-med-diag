@@ -53,6 +53,15 @@ class TestRelationUUID:
         rel2 = Relation(head_id=head, tail_id=tail, type="CAUSES")
         assert rel1.id != rel2.id
 
+    def test_differing_endpoints_give_different_ids(self):
+        """Changing either endpoint id changes the deterministic id."""
+        head, tail = uuid4(), uuid4()
+        base = Relation(head_id=head, tail_id=tail, type="TREATED_BY")
+        other_head = Relation(head_id=uuid4(), tail_id=tail, type="TREATED_BY")
+        other_tail = Relation(head_id=head, tail_id=uuid4(), type="TREATED_BY")
+        assert base.id != other_head.id
+        assert base.id != other_tail.id
+
     def test_none_endpoints_fall_back_to_uuid4(self):
         """Without endpoint ids the id is a fresh uuid4 per construction."""
         rel1 = Relation(head_name="a", tail_name="b", type="TREATED_BY")

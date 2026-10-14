@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import contextlib
 import json
-from typing import Any, TypeVar
+from typing import Any, TypeVar, get_args
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -49,6 +49,16 @@ def _json_dumps(v: Any) -> str:
     return json.dumps(v, default=str)
 
 
+def _is_homogeneous_primitive_list(v: list[Any]) -> bool:
+    """Return whether *v* can be stored as a native Neo4j list property."""
+    if not v:
+        return True
+    kinds = {bool if isinstance(x, bool) else type(x) for x in v}
+    if kinds <= {int, float}:
+        return True
+    return len(kinds) == 1 and next(iter(kinds)) in (str, bool)
+
+
 def _serialize_value(v: Any) -> Any:
     """Convert a single value to a Neo4j-safe scalar, list, or JSON string.
 
@@ -71,7 +81,7 @@ def _serialize_value(v: Any) -> Any:
     if isinstance(v, dict):
         return _json_dumps(v)
     if isinstance(v, list):
-        if not v or all(isinstance(x, (str, int, float, bool)) for x in v):
+        if _is_homogeneous_primitive_list(v):
             return v
         return _json_dumps(v)
     return v
@@ -103,13 +113,13 @@ def _split_properties(dp: DataPoint, raw: dict[str, Any]) -> dict[str, Any]:
     extra = props.pop("schema_properties", None) or {}
     nested: dict[str, Any] = {}
     for key, value in extra.items():
-        if key in core:
+        if key in core or key in _PROMOTED_PROVENANCE_LISTS:
             raise ValueError(
-                f"schema_properties key {key!r} collides with a core "
-                f"{type(dp).__name__} field"
+                f"schema_properties key {key!r} collides with a core or "
+                f"reserved {type(dp).__name__} field"
             )
         if isinstance(value, dict) or (
-            isinstance(value, list) and any(isinstance(x, dict) for x in value)
+            isinstance(value, list) and any(isinstance(x, (dict, list)) for x in value)
         ):
             nested[key] = value
         else:
@@ -171,6 +181,16 @@ def reconstruct_schema_properties(
     return {**extra, **residual}
 
 
+def _is_string_field(cls: type[DataPoint], name: str) -> bool:
+    """Return whether *name* is a plain ``str`` (or ``str | None``) model field."""
+    annotation = cls.model_fields[name].annotation
+    return (
+        annotation is str
+        or set(get_args(annotation)) <= {str, type(None)}
+        and bool(get_args(annotation))
+    )
+
+
 def from_props(cls: type[_T], props: dict[str, Any]) -> _T:
     """Rebuild a DataPoint from a Neo4j property map (inverse of ``to_params``).
 
@@ -190,6 +210,8 @@ def from_props(cls: type[_T], props: dict[str, Any]) -> _T:
     # Core fields holding nested models/dicts were stored as JSON strings by
     # _serialize_value; decode the ones that look like JSON objects/arrays.
     for key, value in list(data.items()):
+        if _is_string_field(cls, key):
+            continue
         if isinstance(value, str) and value[:1] in "{[":
             with contextlib.suppress(ValueError, TypeError):
                 data[key] = json.loads(value)
@@ -250,8 +272,10 @@ def entity_record(entity: Entity) -> dict[str, Any]:
         "id": entity_id,
         "props": params,
         "type_label": type_label,
-        "chunk_ids": [str(c) for c in prov.chunk_ids] if prov else [],
-        "surface_forms": list(prov.surface_forms) if prov else [],
+        "chunk_ids": list(dict.fromkeys(str(c) for c in prov.chunk_ids))
+        if prov
+        else [],
+        "surface_forms": list(dict.fromkeys(prov.surface_forms)) if prov else [],
     }
 
 
@@ -281,8 +305,10 @@ def relation_record(rel: Relation) -> dict[str, Any]:
         "head_id": head_id,
         "tail_id": tail_id,
         "props": params,
-        "chunk_ids": [str(c) for c in prov.chunk_ids] if prov else [],
-        "sources": sources,
+        "chunk_ids": list(dict.fromkeys(str(c) for c in prov.chunk_ids))
+        if prov
+        else [],
+        "sources": list(dict.fromkeys(sources)),
     }
 
 

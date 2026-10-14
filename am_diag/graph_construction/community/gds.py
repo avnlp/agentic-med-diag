@@ -150,7 +150,14 @@ class GdsCommunityDetector(CommunityDetector):
         if not entity_ids:
             logger.warning("GDS: no entity IDs found in relations, skipping")
             return []
-        return await self._run_leiden()
+        communities = await self._run_leiden()
+        scope = set(entity_ids)
+        scoped: list[Community] = []
+        for community in communities:
+            members = [e for e in community.entity_ids if str(e) in scope]
+            if members:
+                scoped.append(community.model_copy(update={"entity_ids": members}))
+        return scoped
 
     async def detect_all(self) -> list[Community]:
         """Detect communities over the entire persisted graph.

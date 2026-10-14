@@ -54,14 +54,16 @@ class ComposedExtractor(Extractor):
         gliner_entities: list[Entity] = []
         if self._gliner is not None:
             gliner_entities, _ = await self._gliner.extract(chunks)
-            results.append((gliner_entities, []))
 
-        if self._glirel is not None:
+        glirel_relations: list[Relation] = []
+        if self._glirel is not None and gliner_entities:
             per_chunk = self._group_by_chunk(gliner_entities, chunks)
             glirel_relations = await self._glirel.extract_from_entities(
                 chunks, per_chunk
             )
-            results.append(([], glirel_relations))
+
+        if self._gliner is not None or glirel_relations:
+            results.append((gliner_entities, glirel_relations))
 
         if self._llm is not None:
             llm_entities, llm_relations = await self._llm.extract(chunks)
@@ -90,12 +92,17 @@ class ComposedExtractor(Extractor):
     ) -> list[Relation]:
         """Set ``head_id``/``tail_id`` by name and rebuild for a stable id.
 
-        Relations whose endpoints are not in the entity set are dropped. Each
-        kept relation is reconstructed (excluding ``id``) so that, once
+        Relations whose endpoints are missing or match several entities are
+        dropped. Each kept relation is reconstructed (excluding ``id``) so that, once
         ``Relation`` marks ``(head_id, tail_id, type)`` as Dedup keys, the id
         becomes the deterministic ``uuid5`` derived from the now-set endpoints.
         """
-        name_to_id = {normalize_text(e.name): e.id for e in entities}
+        candidates: dict[str, set[UUID]] = {}
+        for e in entities:
+            candidates.setdefault(normalize_text(e.name), set()).add(e.id)
+        name_to_id = {
+            name: next(iter(ids)) for name, ids in candidates.items() if len(ids) == 1
+        }
         linked: list[Relation] = []
         dropped = 0
         for rel in relations:
@@ -110,7 +117,7 @@ class ComposedExtractor(Extractor):
             linked.append(Relation(**data))
         if dropped:
             logger.debug(
-                "endpoint-link dropped %d/%d relations (unresolved endpoints)",
+                "endpoint-link dropped %d/%d relations (unresolved/ambiguous)",
                 dropped,
                 len(relations),
             )

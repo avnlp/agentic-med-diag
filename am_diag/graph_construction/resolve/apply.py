@@ -5,7 +5,6 @@ from __future__ import annotations
 from am_diag.common.data_models.cluster import ResolvedAliasMap
 from am_diag.common.data_models.entity import Entity
 from am_diag.common.data_models.relation import Relation
-from am_diag.graph_construction._provenance import ensure_provenance
 
 
 class AliasApplier:
@@ -50,17 +49,18 @@ class AliasApplier:
             all_props: dict = {}
             all_surface_forms: set[str] = set()
             for e in matched:
-                e_prov = ensure_provenance(e)
-                for cid in e_prov.chunk_ids:
+                all_props.update(e.schema_properties)
+                prov = e.provenance
+                for cid in prov.chunk_ids if prov else []:
                     if cid not in all_chunk_ids:
                         all_chunk_ids.append(cid)
-                all_props.update(e.schema_properties)
-                all_surface_forms.update(e_prov.surface_forms)
+                all_surface_forms.update(prov.surface_forms if prov else [])
             all_surface_forms.update(m for m in members if m)
 
             best.canonical_name = alias
             best.aliases = sorted(all_surface_forms)
-            ensure_provenance(best).chunk_ids = all_chunk_ids
+            if best.provenance is not None:
+                best.provenance.chunk_ids = all_chunk_ids
             best.schema_properties = all_props
             merged_entities.append(best)
 
@@ -69,7 +69,7 @@ class AliasApplier:
             text_to_merged[alias] = best
             for e in matched:
                 text_to_merged[e.name] = best
-                for sf in ensure_provenance(e).surface_forms:
+                for sf in e.provenance.surface_forms if e.provenance else []:
                     text_to_merged.setdefault(sf, best)
 
         seen_rels: set[tuple[str, str, str]] = set()

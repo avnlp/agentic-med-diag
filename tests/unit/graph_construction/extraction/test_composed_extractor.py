@@ -75,7 +75,12 @@ def _entity(name: str, label: str, chunk_ids, extractor=ExtractorName.GLINER) ->
 
 
 def _composed(gliner=None, glirel=None, llm=None) -> ComposedExtractor:
-    ext = ComposedExtractor(ExtractionPipelineConfig(), MEDICAL_GRAPHRAG_SCHEMA)
+    ext = ComposedExtractor(
+        ExtractionPipelineConfig(
+            merge_strategy="union", min_entity_length=3, min_entity_score=0.0
+        ),
+        MEDICAL_GRAPHRAG_SCHEMA,
+    )
     ext._gliner = gliner
     ext._glirel = glirel
     ext._llm = llm
