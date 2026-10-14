@@ -7,7 +7,8 @@
 [![Ruff](https://img.shields.io/github/actions/workflow/status/avnlp/agentic-med-diag/ci.yml?branch=main&label=Ruff&logo=ruff)](https://github.com/avnlp/agentic-med-diag/actions/workflows/ci.yml)
 [![ty](https://img.shields.io/github/actions/workflow/status/avnlp/agentic-med-diag/ci.yml?branch=main&label=ty&logo=python)](https://github.com/avnlp/agentic-med-diag/actions/workflows/ci.yml)
 [![Bandit](https://img.shields.io/github/actions/workflow/status/avnlp/agentic-med-diag/ci.yml?branch=main&label=Bandit&logo=owasp)](https://github.com/avnlp/agentic-med-diag/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/github/actions/workflow/status/avnlp/agentic-med-diag/ci.yml?branch=main&label=Tests&logo=pytest)](https://github.com/avnlp/agentic-med-diag/actions/workflows/ci.yml)
+[![Unit tests](https://img.shields.io/github/actions/workflow/status/avnlp/agentic-med-diag/ci.yml?branch=main&label=unit%20tests&logo=pytest&job=Tests)](https://github.com/avnlp/agentic-med-diag/actions/workflows/ci.yml)
+[![Integration tests](https://img.shields.io/github/actions/workflow/status/avnlp/agentic-med-diag/ci.yml?branch=main&label=integration%20tests&logo=pytest&job=Integration+Tests)](https://github.com/avnlp/agentic-med-diag/actions/workflows/ci.yml)
 [![Codecov](https://codecov.io/github/avnlp/agentic-med-diag/graph/badge.svg?token=83MYFZ3UPA)](https://codecov.io/github/avnlp/agentic-med-diag)
 [![License](https://img.shields.io/github/license/avnlp/agentic-med-diag?color=green)](https://github.com/avnlp/agentic-med-diag/blob/main/LICENSE)
 
@@ -182,6 +183,16 @@ When the gate fails, the targeted follow-ups seed another planning round, so the
 
 Every LLM interaction outside the agent loop is a typed BAML function with explicit inputs, outputs, retry policy, and provider configuration.
 
+## Evaluation Metrics
+
+The repository now includes a lightweight `am_diag.evaluation` package for scoring QA outputs:
+
+- `MCQAccuracyEvaluator` for deterministic multiple-choice grading.
+- `AnswerEquivalenceEvaluator` and `DiagnosisAccuracyEvaluator` for BAML-backed open-ended judging.
+- `RubricEvaluator` for rubric-based judging.
+
+These evaluators are structured to match the Medmarks metric families and can be extended with richer dataset-specific judges later.
+
 ## Datasets
 
 We provide loaders for Medical Question-Answer benchmarks across three evaluation formats.
@@ -257,73 +268,89 @@ AGENT_MODEL=gpt-5.5
 
 ### Running the Pipelines
 
-We provide end-to-end pipelines for ingestion and question answering.
+Everything runs through one client (`Workspace`) and one CLI (`am-diag`). A **graph**
+is a self-contained GraphRAG deployment (its own Neo4j, vector store, and schema);
+a **project** is an owned container of graphs and the agent's federation boundary.
 
 ```bash
-# Ingestion
-uv run am-diag-ingest
-uv run am-diag-ingest --corpus pubmed,statpearls --batch-size 50
+# Register a graph (secrets are referenced by env-var NAME, never stored)
+uv run am-diag graphs create --graph-id med \
+    --neo4j-uri bolt://localhost:7687 \
+    --neo4j-user-env NEO4J_USER --neo4j-password-env NEO4J_PASSWORD \
+    --vector-url-env QDRANT_URL
 
-# QA runner
-uv run am-diag-qa
-uv run am-diag-qa --datasets careqa,medqa --limit 10
+# Group graphs into a project
+uv run am-diag projects create --project clinical --graphs med
+
+# Ingest sources (durable, resumable, content-cached) and detect communities.
+# Graph loaders take their source directory (loader:<name>:<dir>); loaders that
+# need shared reference data also take --reference-dir.
+uv run am-diag ingest --graph med \
+    --source corpus:statpearls \
+    --source loader:drugbank:/data/drugbank --reference-dir /data/reference \
+    --finalize
+
+# Federated retrieval and durable batch QA
+uv run am-diag search --project clinical "first-line treatment for hypertension"
+uv run am-diag qa --project clinical --datasets careqa,medqa --limit 10
+
+# Inspect / resume durable jobs
+uv run am-diag jobs list
 ```
 
 ### Programmatic Usage
 
-Ingest a corpus into the knowledge graph:
-
 ```python
+from am_diag import Workspace
+from am_diag.common.data_models import GraphConnection, VectorConnection
 from am_diag.loaders.corpus import StatPearlsCorpusLoader
-from am_diag.db.graph import create_neo4j_client
-from am_diag.vector.embedding import ZembedEmbedder
-from am_diag.ingestion import run_corpus_ingestion
 
-report = await run_corpus_ingestion(
-    corpus_loader=StatPearlsCorpusLoader(),
-    graph_store=create_neo4j_client(),
-    vector_store=vector_store,
-    embedder=ZembedEmbedder(),
-    batch_size=100,
-)
-```
+questions = ["First-line treatments for hypertension in type 2 diabetes?"]
 
-Search with multi-strategy retrieval:
+async with Workspace.from_env() as client:
+    # Admin: register a graph + project (Registry-backed, env-ref secrets)
+    await client.graphs.create(
+        "med",
+        neo4j=GraphConnection(uri="bolt://localhost:7687",
+                              user_env="NEO4J_USER",
+                              password_env="NEO4J_PASSWORD"),
+        vector=VectorConnection(url_env="QDRANT_URL"),
+    )
+    await client.projects.create("clinical", graph_ids=["med"])
 
-```python
-from am_diag.retrieval import SearchEngine, RetrievalConfig
+    # Ingestion: a durable, resumable, content-cached job
+    job = await client.graph("med").ingest(sources=[StatPearlsCorpusLoader()])
+    await job.run(finalize=True)
+    await client.graph("med").add_fact(head="aspirin", relation="TREATS", tail="fever")
 
-engine = SearchEngine(
-    config=RetrievalConfig(),
-    vector_store=vector_store,
-    graph_store=graph_store,
-    embedder=embedder,
-    schema=MEDICAL_GRAPHRAG_SCHEMA,
-    reranker=reranker,
-)
-results = await engine.search("What treats hypertension in chronic kidney disease?",
-                              recipe="hybrid_rrf")
-```
+    # Retrieval: per-graph and federated across a project
+    hits = await client.graph("med").search("sepsis management", recipe="hybrid_rrf")
+    hits = await client.project("clinical").search("sepsis", graphs=["med"])
+    ctx  = await client.graph("med").context("sepsis", max_characters=2500)
 
-Answer a clinical question with the agent:
+    # Agent (project-scoped, federated) + durable batch evaluation
+    answer = await client.project("clinical").answer(
+        "First-line treatments for hypertension in type 2 diabetes?"
+    )
+    qa_job = await client.project("clinical").answer_batch(questions)
+    await qa_job.run()
 
-```python
-from am_diag.agents import answer_question, AgentSettings
-
-answer = await answer_question(
-    "What are first-line treatments for hypertension in a patient with type 2 diabetes?",
-    search_engine=engine,
-    settings=AgentSettings(),
-)
+    # Curation
+    page = await client.graph("med").entities.list(limit=100, label="Drug")
+    entity = page.items[0]
+    await client.graph("med").entities.update(
+        str(entity.id), canonical_name="Acetylsalicylic acid"
+    )
 ```
 
 Stream the agent's progress as typed events (`plan`, `tool_call`, `verifier`, `token`, `final`):
 
 ```python
-from am_diag.agents import stream_answer
+from am_diag import Workspace
 
-async for event in stream_answer("What treats sepsis?", search_engine=engine):
-    print(event.type)
+async with Workspace.from_env() as client:
+    async for event in client.project("clinical").stream("What treats sepsis?"):
+        print(event.type)
 ```
 
 ## Project Structure
@@ -341,16 +368,46 @@ am_diag/
 │   ├── aggregate.py        # Cross-chunk set-union
 │   ├── resolve/            # Deterministic + cluster + LLM resolution
 │   └── community/          # Leiden / GDS detection + Summarization
-├── ingestion/              # LangGraph extraction / embedding / search pipelines
-├── pipelines/              # End-to-end ingestion + Question Answering
+├── ingestion/              # Durable ingestion job engine + cache
 ├── db/
 │   ├── graph/              # Neo4j client + record serialization
 │   └── vector/             # Qdrant / Weaviate stores
 ├── vector/                 # Embedders + rerankers
 ├── retrieval/              # methods · retrievers · rerankers · recipes · SearchEngine
 ├── agents/                 # Agent harness
+├── evaluation/             # Dataset metrics + judging
+├── api/                    # Public API: Workspace, Graph, Project
+├── cli/                    # am-diag CLI + loader registries
 ├── llm/                    # BAML sources + generated client
-└── loaders/                # Corpus loaders + Dataset loaders
+└── loaders/                # Corpus, dataset and graph loaders
+
+tests/
+├── conftest.py             # collection hook (marker auto-apply)
+├── _env.py                 # shared env helpers
+├── unit/                   # unit tests — mocked, no network
+│   ├── conftest.py         # env defaults
+│   ├── agents/
+│   ├── api/
+│   ├── architecture/
+│   ├── chunking/
+│   ├── cli/
+│   ├── common/
+│   ├── db/
+│   ├── evaluation/
+│   ├── graph_construction/
+│   ├── ingestion/
+│   ├── llm/
+│   ├── loaders/
+│   ├── retrieval/
+│   ├── vector/
+│   └── test_import_rules.py
+└── integration/            # integration tests — external services
+    ├── conftest.py
+    ├── agents/
+    ├── db/
+    ├── ingestion/
+    ├── loaders/
+    └── retrieval/
 ```
 
 ## Contributing

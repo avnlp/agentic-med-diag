@@ -46,16 +46,18 @@ am_diag/
 │   └── schema/             # GraphSchema + MEDICAL_GRAPHRAG_SCHEMA
 ├── chunking/               # text chunkers
 ├── graph_construction/     # extraction, normalization, aggregation, resolution, communities
-├── ingestion/              # LangGraph pipelines composing components + storage
-├── pipelines/              # end-to-end ingestion + QA CLIs
+├── ingestion/              # durable ingestion job engine + cache
 ├── db/
 │   ├── graph/              # Neo4j client + record serialization
 │   └── vector/             # Qdrant / Weaviate stores
 ├── vector/                 # embedders + rerankers
 ├── retrieval/              # methods, retrievers, rerankers, recipes, SearchEngine
 ├── agents/                 # DeepAgents harness
+├── evaluation/             # dataset metrics + judging
+├── api/                    # public API: Workspace, Graph, Project
+├── cli/                    # am-diag CLI + loader registries
 ├── llm/                    # BAML sources + generated client
-└── loaders/                # corpus loaders + dataset loaders
+└── loaders/                # corpus, dataset and graph loaders
 tests/
 ├── _env.py                 # shared env helpers
 ├── conftest.py             # directory-based collection hook
@@ -88,8 +90,8 @@ Two architecture rules are enforced by guard tests:
 
 ## Adding Components
 
-- **Corpus loader** (`am_diag/loaders/corpus/`) — subclass `CorpusLoader`, set the `corpus_name` / `hf_repo` class variables, implement `_row_to_document`, and stream `Document` batches via `astream()`. HuggingFace iterators run in `asyncio.to_thread` so they do not block the event loop. Register it in the `CORPUS_LOADER_REGISTRY` in `am_diag/pipelines/ingestion.py`.
-- **Dataset loader** (`am_diag/loaders/dataset/`) — subclass `QADataset`, set `dataset_name` / `hf_repo`, and implement `load()` returning `list[QASample]`. Register it in the `DATASET_REGISTRY` in `am_diag/pipelines/qa.py`.
+- **Corpus loader** (`am_diag/loaders/corpus/`) — subclass `CorpusLoader`, set the `corpus_name` / `hf_repo` class variables, implement `_row_to_document`, and stream `Document` batches via `astream()`. HuggingFace iterators run in `asyncio.to_thread` so they do not block the event loop. Register it in the `CORPUS_LOADER_REGISTRY` in `am_diag/cli/registries.py`.
+- **Dataset loader** (`am_diag/loaders/dataset/`) — subclass `QADataset`, set `dataset_name` / `hf_repo`, and implement `load()` returning `list[QASample]`. Register it in the `DATASET_REGISTRY` in `am_diag/cli/registries.py`.
 - **Graph-construction / retrieval component** — keep it pure and storage-agnostic, accept the `GraphSchema` where relevant, and follow the per-family base class.
 - **BAML function** — edit the `.baml` sources under `am_diag/llm/baml_src/`, then regenerate the typed client with `make baml-gen`. Never edit `am_diag/llm/baml_client/` by hand; it is fully generated.
 
@@ -140,7 +142,7 @@ make clean                 # remove build artifacts and caches
 1. Create a feature branch off `main` (for example, `feat/add-bioasq-loader` or `fix/relation-hydration`).
 2. Make your change with tests and Google-style docstrings.
 3. Run `make lint-all` and `make test` and make sure both pass. If you touched any `.baml` file, run `make baml-gen` and commit the regenerated client.
-4. Update `docs/` if your change affects user-facing behaviour.
+4. Update `README.md` if your change affects user-facing behaviour.
 5. Open a pull request against `main` with a clear description of the change and the motivation. Link any related issue.
 
 ## Reporting Issues
