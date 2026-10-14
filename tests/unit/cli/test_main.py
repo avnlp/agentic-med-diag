@@ -6,14 +6,20 @@ specs resolve against the relocated registries. No commands are executed.
 
 from __future__ import annotations
 
+import json
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
+from am_diag.cli import main as cli_main
 from am_diag.cli.main import _build_source, build_parser
 from am_diag.cli.registries import (
     CORPUS_LOADER_REGISTRY,
     DATASET_REGISTRY,
     GRAPH_LOADER_REGISTRY,
 )
+from am_diag.common.data_models.job import JobItem, JobProgress, JobRecord
 from am_diag.loaders.corpus.pubmed import PubMedCorpusLoader
 from am_diag.loaders.graph.drugbank import DrugBankGraphLoader
 from am_diag.loaders.graph.gene_ontology import GeneOntologyGraphLoader
@@ -59,11 +65,18 @@ class TestParser:
         assert args.project == "clinical"
         assert args.query == "sepsis management"
 
-    def test_jobs_resume_parses(self):
-        """Verify jobs resume parses the job id."""
-        args = build_parser().parse_args(["jobs", "resume", "--job-id", "abc"])
-        assert args.action == "resume"
-        assert args.job_id == "abc"
+    def test_jobs_resume_is_not_offered(self):
+        """Verify jobs resume is rejected because jobs cannot resume across runs."""
+        with pytest.raises(SystemExit):
+            build_parser().parse_args(["jobs", "resume", "--job-id", "abc"])
+
+    @pytest.mark.parametrize("limit", ["0", "-3"])
+    def test_qa_limit_must_be_positive(self, limit):
+        """Verify a non-positive --limit is rejected instead of meaning no limit."""
+        with pytest.raises(SystemExit):
+            build_parser().parse_args(
+                ["qa", "--project", "p", "--datasets", "medqa", "--limit", limit]
+            )
 
     def test_missing_subcommand_errors(self):
         """Verify a missing subcommand exits with an error."""
@@ -101,6 +114,8 @@ class TestBuildSource:
         )
 
         assert isinstance(source, DrugBankGraphLoader)
+        assert str(source._harmonizer._ref.reference_dir) == "/data/reference"
+        assert source._enricher._ref is source._harmonizer._ref
 
     def test_graph_loader_needing_reference_without_it_exits(self):
         """Verify a missing reference directory is reported, not a TypeError."""
@@ -117,3 +132,120 @@ class TestBuildSource:
         """Verify malformed or unknown specs exit with the offending spec."""
         with pytest.raises(SystemExit, match="Unknown source spec"):
             _build_source(spec)
+
+
+class TestGraphsCreate:
+    """Tests for the vector connection built by ``graphs create``."""
+
+    @pytest.mark.parametrize(
+        ("argv", "expected_env"),
+        [
+            ([], "QDRANT_URL"),
+            (["--vector-backend", "weaviate"], "WEAVIATE_URL"),
+            (["--vector-backend", "weaviate", "--vector-url-env", "MY_URL"], "MY_URL"),
+        ],
+    )
+    async def test_vector_url_env_follows_backend(self, argv, expected_env):
+        """Verify the URL env var defaults per backend unless overridden."""
+        client = SimpleNamespace(
+            graphs=SimpleNamespace(
+                create=AsyncMock(return_value=SimpleNamespace(graph_id="g"))
+            )
+        )
+        args = build_parser().parse_args(
+            ["graphs", "create", "--graph-id", "g", "--neo4j-uri", "bolt://h", *argv]
+        )
+
+        await cli_main._handle_graphs(client, args)
+
+        vector = client.graphs.create.await_args.kwargs["vector"]
+        assert vector.url_env == expected_env
+
+
+class TestHandleQa:
+    """Tests for the ``qa`` subcommand."""
+
+    @staticmethod
+    def _client(items):
+        record = JobRecord(
+            job_id="job1",
+            kind="qa",
+            project_id="p",
+            status="partial",
+            progress=JobProgress(total=len(items), succeeded=1, failed=1),
+        )
+        job = SimpleNamespace(run=AsyncMock(return_value=record), items=lambda: items)
+        project = SimpleNamespace(answer_batch=AsyncMock(return_value=job))
+        return SimpleNamespace(project=lambda _id: project), project
+
+    async def test_strips_names_forwards_limit_and_writes_results(
+        self, monkeypatch, tmp_path
+    ):
+        """Verify spaced dataset names load with the limit and results are saved."""
+        loaded = {}
+
+        def registry_entry(name):
+            def factory():
+                dataset = MagicMock()
+                dataset.load.side_effect = lambda **kw: (
+                    loaded.setdefault(name, kw),
+                    [SimpleNamespace(question=f"{name}-q")],
+                )[1]
+                return dataset
+
+            return factory
+
+        monkeypatch.setattr(
+            cli_main,
+            "DATASET_REGISTRY",
+            {"medqa": registry_entry("medqa"), "medmcqa": registry_entry("medmcqa")},
+        )
+        items = [
+            JobItem(
+                item_id="a",
+                sequence_index=0,
+                kind="question",
+                ref={"question": "medqa-q"},
+                status="succeeded",
+                output={"answer": "yes"},
+            ),
+            JobItem(
+                item_id="b",
+                sequence_index=1,
+                kind="question",
+                ref={"question": "medmcqa-q"},
+                status="failed",
+                error={"type": "RuntimeError", "message": "boom"},
+            ),
+        ]
+        client, project = self._client(items)
+        output = tmp_path / "out.json"
+        args = build_parser().parse_args(
+            [
+                "qa",
+                "--project",
+                "p",
+                "--datasets",
+                "medqa, medmcqa",
+                "--limit",
+                "5",
+                "--output",
+                str(output),
+            ]
+        )
+
+        await cli_main._handle_qa(client, args)
+
+        assert loaded == {"medqa": {"limit": 5}, "medmcqa": {"limit": 5}}
+        assert project.answer_batch.await_args.args[0] == ["medqa-q", "medmcqa-q"]
+        report = json.loads(output.read_text("utf-8"))
+        assert report["status"] == "partial"
+        assert report["items"][0]["output"] == {"answer": "yes"}
+        assert report["items"][1]["error"]["message"] == "boom"
+
+    async def test_unknown_dataset_exits(self):
+        """Verify an unknown dataset name is reported instead of a KeyError."""
+        args = build_parser().parse_args(["qa", "--project", "p", "--datasets", "nope"])
+
+        with pytest.raises(SystemExit, match="Unknown dataset"):
+            await cli_main._handle_qa(SimpleNamespace(), args)

@@ -2,7 +2,7 @@
 
 Subcommands: graphs / projects (registry admin), ingest / finalize (durable
 ingestion), search (federated retrieval), qa (durable batch evaluation), and
-jobs (list/get/resume). All real work is delegated to :class:`Workspace`.
+jobs (list/get). All real work is delegated to :class:`Workspace`.
 """
 
 from __future__ import annotations
@@ -90,6 +90,14 @@ def _build_source(spec: str, reference_dir: str | None = None) -> object:
     raise SystemExit(f"Unknown source spec: {spec!r}")
 
 
+def _positive_int(value: str) -> int:
+    """Parse a strictly positive integer for argparse."""
+    number = int(value)
+    if number < 1:
+        raise argparse.ArgumentTypeError(f"must be a positive integer: {value!r}")
+    return number
+
+
 def _add_graphs(sub: Any) -> None:
     """Register the ``graphs`` subcommands."""
     graphs = sub.add_parser("graphs", help="Manage graph deployments")
@@ -103,7 +111,11 @@ def _add_graphs(sub: Any) -> None:
     g_create.add_argument(
         "--vector-backend", choices=["qdrant", "weaviate"], default="qdrant"
     )
-    g_create.add_argument("--vector-url-env", default="QDRANT_URL")
+    g_create.add_argument(
+        "--vector-url-env",
+        default=None,
+        help="Env var holding the vector store URL (default: <BACKEND>_URL)",
+    )
     g_create.add_argument("--vector-api-key-env", default=None)
     g_create.add_argument("--name", default=None)
     g_sub.add_parser("list", help="List graphs")
@@ -157,7 +169,7 @@ def _add_ops(sub: Any) -> None:
     qa = sub.add_parser("qa", help="Batch QA evaluation over a project")
     qa.add_argument("--project", required=True)
     qa.add_argument("--datasets", required=True)
-    qa.add_argument("--limit", type=int, default=None)
+    qa.add_argument("--limit", type=_positive_int, default=None)
     qa.add_argument("--output", default="qa_results.json")
 
     jobs = sub.add_parser("jobs", help="Inspect durable jobs")
@@ -165,8 +177,6 @@ def _add_ops(sub: Any) -> None:
     j_sub.add_parser("list", help="List jobs")
     j_get = j_sub.add_parser("get", help="Show one job")
     j_get.add_argument("--job-id", required=True)
-    j_resume = j_sub.add_parser("resume", help="Resume a live job")
-    j_resume.add_argument("--job-id", required=True)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -221,7 +231,7 @@ async def _handle_graphs(client: Workspace, args: argparse.Namespace) -> None:
             ),
             vector=VectorConnection(
                 backend=args.vector_backend,
-                url_env=args.vector_url_env,
+                url_env=args.vector_url_env or f"{args.vector_backend.upper()}_URL",
                 api_key_env=args.vector_api_key_env,
             ),
             name=args.name,
@@ -255,17 +265,27 @@ async def _handle_projects(client: Workspace, args: argparse.Namespace) -> None:
 async def _handle_qa(client: Workspace, args: argparse.Namespace) -> None:
     """Handle the ``qa`` subcommand: load datasets and run a durable QAJob."""
     questions: list[str] = []
-    for name in args.datasets.split(","):
-        dataset = DATASET_REGISTRY[name]()
-        samples = dataset.load()
-        if args.limit:
-            samples = samples[: args.limit]
+    names = [name.strip() for name in args.datasets.split(",") if name.strip()]
+    unknown = [name for name in names if name not in DATASET_REGISTRY]
+    if unknown:
+        raise SystemExit(
+            f"Unknown dataset(s): {', '.join(unknown)}. "
+            f"Available: {', '.join(sorted(DATASET_REGISTRY))}"
+        )
+    for name in names:
+        samples = DATASET_REGISTRY[name]().load(limit=args.limit)
         questions.extend(s.question for s in samples)
     job = await client.project(args.project).answer_batch(questions)
     record = await job.run()
     print(f"QA job {record.job_id}: {record.status}, {len(questions)} questions")
+    report = {
+        "job_id": record.job_id,
+        "status": record.status,
+        "progress": record.progress.model_dump(),
+        "items": [item.model_dump(mode="json") for item in job.items()],
+    }
     with open(args.output, "w", encoding="utf-8") as fh:
-        json.dump({"job_id": record.job_id, "status": record.status}, fh, indent=2)
+        json.dump(report, fh, indent=2)
 
 
 async def _handle_jobs(client: Workspace, args: argparse.Namespace) -> None:
@@ -276,9 +296,6 @@ async def _handle_jobs(client: Workspace, args: argparse.Namespace) -> None:
     elif args.action == "get":
         rec = client.jobs.get(args.job_id)
         print(rec.model_dump_json(indent=2))
-    elif args.action == "resume":
-        rec = await client.jobs.resume(args.job_id)
-        print(f"{rec.job_id}: {rec.status}")
 
 
 def main(argv: list[str] | None = None) -> None:
