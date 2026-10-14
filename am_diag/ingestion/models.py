@@ -1,7 +1,8 @@
 """Report models for the ingestion pipeline.
 
-These are returned by ``run_corpus_ingestion`` and by the extraction pipeline
-nodes to track progress and success counts.
+These summarize ingestion progress and success counts. ``IngestionReport`` is
+returned by the ``Graph.add`` inline write path; ``ExtractionReport`` is produced
+by the extraction pipeline nodes.
 """
 
 from __future__ import annotations

@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from am_diag.common.data_models.connection import GraphConnection, VectorConnection
 from am_diag.common.data_models.schema import GraphSchema
+
+
+_GRAPH_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 
 
 def _utcnow() -> datetime:
@@ -55,3 +59,14 @@ class GraphRecord(BaseModel):
     owner_id: str | None = None
     created_at: datetime = Field(default_factory=_utcnow)
     updated_at: datetime = Field(default_factory=_utcnow)
+
+    @field_validator("graph_id")
+    @classmethod
+    def _validate_graph_id(cls, graph_id: str) -> str:
+        """Require an id that is safe to use as a cache file name."""
+        if ".." in graph_id or _GRAPH_ID_RE.fullmatch(graph_id) is None:
+            raise ValueError(
+                "graph_id may contain only letters, digits, '.', '_' and '-', "
+                "and must start with a letter or digit"
+            )
+        return graph_id
