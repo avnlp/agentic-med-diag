@@ -47,15 +47,18 @@ am_diag/
   loaders/
     corpus/             # raw medical text loaders for graph construction
     dataset/            # QA benchmark dataset loaders for evaluation
+    graph/              # loaders for pre-built biomedical knowledge graphs
   graph_construction/   # extraction, normalization, aggregation, resolution, communities
-  ingestion/            # LangGraph pipeline composition
-  pipelines/            # multi-corpus ingestion and multi-dataset QA runs
+  ingestion/            # ingestion job engine and search pipeline
   db/
     graph/              # Neo4j client, graph store primitives, record serialization
     vector/             # Qdrant and Weaviate vector stores
   vector/               # embedders and rerankers
   retrieval/            # retrieval methods, retrievers, rerankers, SearchEngine
   agents/               # agentic clinical QA harness
+  evaluation/           # dataset metrics and judging
+  api/                  # public user-facing API (Workspace, Project, Graph)
+  cli/                  # CLI over the Workspace and the loader registries
   llm/                  # BAML sources and generated BAML client
 tests/
   unit/                 # unit tests, no network
@@ -120,7 +123,7 @@ Environment setup details are in @CONTRIBUTING.md. If a tool such as `uv`, `pyte
 - Use `snake_case` for functions and variables, `PascalCase` for classes, and `test_*.py` for tests.
 - Prefer descriptive names. Avoid abbreviations such as `ver` when `version` is clearer, or `rp` when `requires_python` is clearer.
 - Prefer top-level imports. Use local imports only when needed to avoid cycles, optional dependency import costs, or test-specific patching patterns already used nearby.
-- Respect the import layering: a module may import from its own layer or a lower one, never a higher one. From lowest to highest the layers are `common`, base contracts and settings, provider implementations (Neo4j, Qdrant, Weaviate, and the embedder and reranker backends), `graph_construction`, `retrieval`, `ingestion`, and `agents`. `tests/unit/test_import_rules.py` enforces this for the modules in its `LAYERS` table. Packages that are not in the table, such as `chunking`, `loaders`, and `pipelines`, are not checked.
+- Dependencies point inward: `ingestion`, `agents`, and `retrieval` must not import `am_diag.api`. They depend on consumer-owned Protocols instead. `tests/unit/architecture/test_layering.py` enforces this.
 - Add type hints to new and modified public APIs.
 - Prefer `TypedDict` over broad `dict`/`Mapping` when documenting structured dictionaries in code.
 - Keep state explicit. Do not dynamically add/read fields with `setattr` and `getattr` when normal attributes or models would be clearer.
@@ -169,7 +172,7 @@ Follow nearby components first.
 - Implement `_row_to_document`.
 - Stream `Document` batches via `astream()`.
 - Run Hugging Face iterators in `asyncio.to_thread` so they do not block the event loop.
-- Register loaders in `CORPUS_LOADER_REGISTRY` in `am_diag/pipelines/ingestion.py`.
+- Register loaders in `CORPUS_LOADER_REGISTRY` in `am_diag/cli/registries.py`.
 
 ### Dataset loaders
 
@@ -178,7 +181,7 @@ Follow nearby components first.
 - Set `dataset_name` and `hf_repo`.
 - Implement `load()` returning `list[QASample]`.
 - `QASample` is `MCQSample | RubricSample | RARMedSample | OpenEndedSample`.
-- Register datasets in `DATASET_REGISTRY` in `am_diag/pipelines/qa.py`.
+- Register datasets in `DATASET_REGISTRY` in `am_diag/cli/registries.py`.
 
 ### Graph-construction and retrieval components
 

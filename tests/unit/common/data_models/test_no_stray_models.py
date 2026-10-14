@@ -1,6 +1,6 @@
 """Guard test: enforce that no domain data models live outside common/data_models.
 
-Rule 1 from the overhaul plan:
+Project rule:
 "All data structures live in am_diag/common/data_models; prefer extending over
 adding; nothing in feature submodules."
 
@@ -30,7 +30,6 @@ _ALLOWED_PATTERNS: list[re.Pattern] = [
     re.compile(r"inlinedbaml\.py$"),  # BAML inline
     re.compile(r"__init__\.py$"),  # re-exports are fine
     # TypedDict pipeline states are not domain models
-    re.compile(r"ingestion/state\.py$"),
     re.compile(r"ingestion/search_pipeline\.py$"),
     # Ingestion report models (pipeline output types, not graph domain models)
     re.compile(r"ingestion/models\.py$"),
@@ -38,8 +37,6 @@ _ALLOWED_PATTERNS: list[re.Pattern] = [
     re.compile(r"agents/models\.py$"),
     # Reranker result types (framework-required transport types)
     re.compile(r"vector/reranking/base\.py$"),
-    # Ingestion pipeline dataclass (pipeline helper, not a domain model)
-    re.compile(r"pipelines/ingestion\.py$"),
     # Retrieval config and filter types (configuration, not domain models)
     re.compile(r"retrieval/filters\.py$"),
     re.compile(r"retrieval/config\.py$"),

@@ -6,22 +6,22 @@ BAML is kept only inside retrieval/ingestion tools.
 
 Usage::
 
-    from am_diag.agents import build_clinical_agent, answer_question
+    from am_diag.agents import build_clinical_agent
 
     agent = await build_clinical_agent(search_engine=engine)
     answer = await agent.ainvoke(...)
+
+The public answer/stream/answer_batch surface lives on ``am_diag.Workspace``'s
+project handles (``client.project(...).answer(...)``).
 """
 
 from __future__ import annotations
 
 from am_diag.agents.agent import build_clinical_agent
-from am_diag.agents.run import answer_question, stream_answer
 from am_diag.agents.settings import AgentSettings
 
 
 __all__ = [
     "AgentSettings",
-    "answer_question",
     "build_clinical_agent",
-    "stream_answer",
 ]
