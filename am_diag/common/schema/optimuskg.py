@@ -152,7 +152,13 @@ SEMANTIC_RELATIONS: dict[str, list[str]] = {
 }
 
 # Properties every structured relation may carry (queryable on the edge).
-_RELATION_PROPERTIES = ["undirected", "sources", "structural_label"]
+_RELATION_PROPERTIES = [
+    "undirected",
+    "sources",
+    "indirect_sources",
+    "asserted_relations",
+    "structural_label",
+]
 
 
 def _endpoints(structural_label: str) -> tuple[str, str]:
