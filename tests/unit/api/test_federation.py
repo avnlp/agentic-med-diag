@@ -42,7 +42,7 @@ def _fake_graph(tmp_path, graph_id: str, entity_name: str) -> Graph:
     return Graph(
         graph_store=SimpleNamespace(close=AsyncMock()),
         vector_store=SimpleNamespace(close=AsyncMock()),
-        embedder=SimpleNamespace(model_id="fake-model"),
+        embedder=SimpleNamespace(model_id="fake-model", close=AsyncMock()),
         search_engine=SimpleNamespace(search=AsyncMock(return_value=[result])),
         schema=MEDICAL_GRAPHRAG_SCHEMA,
         collections=_COLLECTIONS,
@@ -57,7 +57,9 @@ def _setup(tmp_path):
     client = Workspace(registry, state_dir=tmp_path / "state")
     registry.add_graph(_graph_record("a"))
     registry.add_graph(_graph_record("b"))
+    registry.add_graph(_graph_record("unreachable"))
     registry.add_project(ProjectRecord(project_id="p", graph_ids=["a", "b"]))
+    registry.add_project(ProjectRecord(project_id="q", graph_ids=["a", "unreachable"]))
     client.attach_graph(_fake_graph(tmp_path, "a", "from_a"))
     client.attach_graph(_fake_graph(tmp_path, "b", "from_b"))
     return client
@@ -80,6 +82,20 @@ class TestFederatedSearch:
         client = _setup(tmp_path)
         results = await client.project("p").search("q", graphs=["a"])
         assert {r.source_graph_id for r in results} == {"a"}
+        client.graph("b").search_engine.search.assert_not_awaited()
+
+    async def test_subset_does_not_connect_other_members(self, tmp_path):
+        """Verify members outside the subset are never built from the registry."""
+        client = _setup(tmp_path)
+        results = await client.project("q").search("q", graphs=["a"])
+        assert {r.source_graph_id for r in results} == {"a"}
+
+    async def test_limit_raises_per_graph_candidate_limit(self, tmp_path):
+        """Verify a federated limit above the recipe cap reaches each graph."""
+        client = _setup(tmp_path)
+        await client.project("p").search("q", limit=100)
+        recipe = client.graph("a").search_engine.search.await_args.kwargs["recipe"]
+        assert recipe.limit == 100
 
     async def test_non_member_graph_raises(self, tmp_path):
         """Verify requesting a non-member graph raises."""
@@ -92,4 +108,5 @@ class TestFederatedSearch:
         client = _setup(tmp_path)
         ctx = await client.project("p").context("q", max_characters=500)
         assert len(ctx) <= 500
-        assert "from_a" in ctx or "from_b" in ctx
+        assert "from_a" in ctx
+        assert "from_b" in ctx

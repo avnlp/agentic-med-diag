@@ -11,6 +11,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
+
 from am_diag.api.graph import Graph
 from am_diag.api.registry import Registry
 from am_diag.api.workspace import Workspace
@@ -42,6 +44,7 @@ def _setup(tmp_path):
     embedder = SimpleNamespace(
         embed=AsyncMock(side_effect=lambda texts: [[0.1, 0.2] for _ in texts]),
         model_id="fake-model",
+        close=AsyncMock(),
     )
     graph = Graph(
         graph_store=SimpleNamespace(
@@ -67,9 +70,24 @@ class TestWriteSurface:
     async def test_ingest_returns_draft_job(self, tmp_path):
         """Verify ingest returns a non-running job registered as live."""
         client, _, live_jobs = _setup(tmp_path)
-        job = await client.graph("med").ingest([])
+        job = await client.graph("med").ingest([SimpleNamespace(source_kind="corpus")])
         assert job.status == "draft"
         assert live_jobs[job.id] is job
+
+    async def test_ingest_rejects_empty_sources(self, tmp_path):
+        """Verify ingest requires at least one source."""
+        client, _, _ = _setup(tmp_path)
+        with pytest.raises(ValueError, match="at least one source"):
+            await client.graph("med").ingest([])
+
+    async def test_add_rejects_mixed_inputs(self, tmp_path):
+        """Verify add() refuses text combined with entities instead of dropping one."""
+        client, graph, _ = _setup(tmp_path)
+        with pytest.raises(ValueError, match="not both"):
+            await client.graph("med").add(
+                text="note", entities=[Entity(name="sepsis", label="Disease")]
+            )
+        graph.graph_store.write_knowledge_graph.assert_not_awaited()
 
     async def test_add_structured_returns_report(self, tmp_path):
         """Verify add() with entities runs the engine and returns a report."""
@@ -78,7 +96,7 @@ class TestWriteSurface:
             entities=[Entity(name="sepsis", label="Disease")]
         )
         assert isinstance(report, IngestionReport)
-        assert report.chunks_ingested == 1
+        assert report.entities_ingested == 1
         graph.graph_store.write_knowledge_graph.assert_awaited_once()
 
     async def test_add_fact_writes_single_relation(self, tmp_path):

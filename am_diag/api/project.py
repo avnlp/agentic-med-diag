@@ -34,6 +34,23 @@ if TYPE_CHECKING:
     from am_diag.api.registry import Registry
 
 
+class _SettingsAnswerer:
+    """Answers batch questions with fixed per-call agent settings."""
+
+    def __init__(self, project: Project, settings: AgentSettings) -> None:
+        """Bind the answerer to a project and the settings to apply."""
+        self._project = project
+        self._settings = settings
+
+    async def answer(
+        self, question: str, /, *, graphs: list[str] | None = None
+    ) -> ClinicalAnswer:
+        """Answer ``question`` using the bound settings."""
+        return await self._project.answer(
+            question, graphs=graphs, settings=self._settings
+        )
+
+
 class Project:
     """A federation/agent boundary over one or more graphs.
 
@@ -63,7 +80,7 @@ class Project:
         self._graphs: list[Graph] | None = list(graphs) if graphs is not None else None
         self._registry = registry
         self._pool = pool
-        self._agents: dict[tuple[str, tuple[str, ...]], object] = {}
+        self._agents: dict[tuple[str, str], tuple[tuple[Graph, ...], object]] = {}
 
     @property
     def project_id(self) -> str:
@@ -84,20 +101,18 @@ class Project:
         return [g.graph_id for g in self._live_graphs(None)]
 
     def _live_graphs(self, graphs: list[str] | None) -> list[Graph]:
-        """Resolve target live graphs, validating project membership."""
-        if self._pool is None:
-            live = list(self._graphs or [])
-        else:
-            live = [self._pool.graph(gid) for gid in self._record().graph_ids]
-        if graphs is None:
-            return live
-        by_id = {graph.graph_id: graph for graph in live}
-        missing = [gid for gid in graphs if gid not in by_id]
+        """Resolve target live graphs, connecting only the requested members."""
+        adhoc = {graph.graph_id: graph for graph in self._graphs or []}
+        member_ids = list(adhoc) if self._pool is None else self._record().graph_ids
+        requested = member_ids if graphs is None else graphs
+        missing = [gid for gid in requested if gid not in member_ids]
         if missing:
             raise GraphNotFoundError(
                 f"Graph {missing[0]!r} is not a member of project {self._project_id!r}"
             )
-        return [by_id[gid] for gid in graphs]
+        if self._pool is None:
+            return [adhoc[gid] for gid in requested]
+        return [self._pool.graph(gid) for gid in requested]
 
     def _target_graphs(self, graphs: list[str] | None) -> list[str]:
         """Resolve the target graph set, validating project membership.
@@ -163,20 +178,25 @@ class Project:
     async def _agent(
         self, graphs: list[str] | None, settings: AgentSettings | None
     ) -> Any:
-        """Build (and cache per graph-set) the agent wired to federated tools."""
+        """Build the agent wired to federated tools, cached per config.
+
+        The cache key covers the graph set and the resolved settings. A cached
+        agent is reused only while the pool still serves the same live graph
+        objects, so a graph rebuilt after a schema update gets a fresh agent.
+        """
         from am_diag.agents.agent import build_clinical_agent  # noqa: PLC0415
 
-        target = tuple(sorted(self._target_graphs(graphs)))
+        live = sorted(self._live_graphs(graphs), key=lambda graph: graph.graph_id)
         resolved = self._resolved_settings(settings)
-        cache = self._agents
-        cache_key = (self._project_id, target)
-        # Per-call settings bypass the shared cache so they never pollute it.
-        if settings is None and cache_key in cache:
-            return cache[cache_key]
-        fed = FederatedSearch(self._live_graphs(list(target)))
-        agent = await build_clinical_agent(fed, resolved)
-        if settings is None:
-            cache[cache_key] = agent
+        graph_ids = [graph.graph_id for graph in live]
+        cache_key = (self._project_id, agent_config_hash(resolved, graph_ids))
+        cached = self._agents.get(cache_key)
+        if cached is not None and all(
+            old is new for old, new in zip(cached[0], live, strict=True)
+        ):
+            return cached[1]
+        agent = await build_clinical_agent(FederatedSearch(live), resolved)
+        self._agents[cache_key] = (tuple(live), agent)
         return agent
 
     async def answer(
@@ -218,7 +238,11 @@ class Project:
         """
         agent = await self._agent(graphs, settings)
         async for event in agent.astream_events(
-            {"messages": to_messages(query_or_messages)}, version="v2"
+            {"messages": to_messages(query_or_messages)},
+            config={
+                "recursion_limit": self._resolved_settings(settings).recursion_limit
+            },
+            version="v2",
         ):
             mapped = map_event(event)
             if mapped is not None:
@@ -256,7 +280,7 @@ class Project:
         )
         return QAJob(
             record,
-            answerer=self,
+            answerer=_SettingsAnswerer(self, settings) if settings else self,
             cache=target_graph.ensure_cache(),
             state_dir=target_graph.state_dir,
             questions=list(questions),

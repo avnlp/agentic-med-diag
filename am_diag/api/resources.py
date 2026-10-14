@@ -37,7 +37,7 @@ _IMMUTABLE_KEYS = frozenset({"id", "label", "kind", "head_id", "tail_id"})
 
 def _page(items: _List[Any], limit: int) -> Page[Any]:
     """Wrap items in a page; the next cursor is the last id of a full page."""
-    next_cursor = str(items[-1].id) if len(items) == limit else None
+    next_cursor = str(items[-1].id) if items and len(items) == limit else None
     return Page(items, next_cursor)
 
 
@@ -73,24 +73,30 @@ def _community_from_row(row: dict[str, Any]) -> Community:
 
 
 def _semantic_patch(
-    fields: dict[str, Any], attributes: dict[str, Any] | None
+    fields: dict[str, Any],
+    attributes: dict[str, Any] | None,
+    model: type[Entity] | type[Relation],
 ) -> dict[str, Any]:
     """Build a property patch from explicit semantic fields plus attributes.
 
     Args:
         fields: Named semantic fields with ``None`` values dropped.
         attributes: Optional free-form schema properties (primitive values).
+        model: The model being patched; its field names are reserved.
 
     Returns:
         The merged property map.
 
     Raises:
-        SchemaError: If an attribute key collides with a structural identity key.
+        SchemaError: If an attribute key collides with a structural identity key
+            or a core field of ``model``.
     """
     patch = {k: v for k, v in fields.items() if v is not None}
     for key, value in (attributes or {}).items():
         if key in _IMMUTABLE_KEYS:
             raise SchemaError(f"Cannot modify structural key: {key!r}")
+        if key in model.model_fields:
+            raise SchemaError(f"Attribute collides with a core field: {key!r}")
         patch[key] = value
     return patch
 
@@ -154,6 +160,7 @@ class EntityResource:
         patch = _semantic_patch(
             {"name": name, "canonical_name": canonical_name, "aliases": aliases},
             attributes,
+            Entity,
         )
         row = await self._store.update_entity(entity_id, patch)
         if row is None:
@@ -212,7 +219,7 @@ class RelationResource:
             SchemaError: If ``attributes`` touches a structural key.
         """
         patch = _semantic_patch(
-            {"type": relation_type, "description": description}, attributes
+            {"type": relation_type, "description": description}, attributes, Relation
         )
         row = await self._store.update_relation(relation_id, patch)
         if row is None:

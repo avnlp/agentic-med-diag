@@ -85,4 +85,5 @@ def pack_context(results: list[SearchResult], max_characters: int = 2500) -> str
             block_added = block_added or candidate != header
         if not block_added and out and out[-1] == header:
             out.pop()
+            length -= len(header) + (1 if out else 0)
     return "\n".join(out)

@@ -71,6 +71,7 @@ class VectorConnection(BaseModel):
     @field_validator("collections")
     @classmethod
     def _fill_default_collections(
-        cls, value: dict[CollectionKind, str]
+        cls, collections: dict[CollectionKind, str]
     ) -> dict[CollectionKind, str]:
-        return {**_default_collections(), **value}
+        """Fill collection kinds the caller omitted with their default names."""
+        return {**_default_collections(), **collections}

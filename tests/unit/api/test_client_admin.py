@@ -7,14 +7,18 @@ and embedder are lazy and never connect during these tests.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from am_diag.api.errors import ConnectionError as WorkspaceConnectionError
-from am_diag.api.errors import RegistryError
+from am_diag.api.errors import GraphNotFoundError, RegistryError
+from am_diag.api.graph import Graph
 from am_diag.api.workspace import Workspace
 from am_diag.common.data_models.connection import GraphConnection, VectorConnection
+from am_diag.db.graph.settings import Neo4jSettings
+from am_diag.db.vector.settings import QdrantSettings
 
 
 _DRIVER_TARGET = "am_diag.db.graph.neo4j.AsyncGraphDatabase.driver"
@@ -90,6 +94,52 @@ class TestGraphAdmin:
             await client.graphs.create("med", neo4j=_neo4j(), vector=_vector())
             with pytest.raises(RegistryError):
                 await client.graphs.create("med", neo4j=_neo4j(), vector=_vector())
+        await client.aclose()
+
+    async def test_unhealthy_backend_rolls_back_and_closes_driver(
+        self, client, mock_driver, monkeypatch
+    ):
+        """Verify a failed health check removes the record and closes the driver."""
+        _set_env(monkeypatch)
+        mock_driver.verify_connectivity = AsyncMock(side_effect=OSError("down"))
+        with patch(_DRIVER_TARGET, return_value=mock_driver), pytest.raises(OSError):
+            await client.graphs.create("med", neo4j=_neo4j(), vector=_vector())
+        assert await client.graphs.list() == []
+        mock_driver.close.assert_awaited()
+
+    async def test_create_rejects_id_of_attached_graph(
+        self, client, mock_driver, monkeypatch
+    ):
+        """Verify create() will not shadow a live graph attached under the same id."""
+        _set_env(monkeypatch)
+        with patch(_DRIVER_TARGET, return_value=mock_driver):
+            attached = Graph.connect(
+                neo4j=Neo4jSettings(uri="bolt://h:7687", user="u", password="p"),
+                vector=QdrantSettings(url="http://localhost:6333"),
+                graph_id="med",
+                embedder=SimpleNamespace(close=AsyncMock()),
+            )
+            client.attach_graph(attached)
+            with pytest.raises(RegistryError):
+                await client.graphs.create("med", neo4j=_neo4j(), vector=_vector())
+        assert await client.graphs.list() == []
+
+    async def test_delete_unknown_graph_does_not_wipe_data(self, client):
+        """Verify delete(drop_data=True) validates the record before touching data."""
+        with pytest.raises(GraphNotFoundError):
+            await client.graphs.delete("ghost", drop_data=True)
+
+    async def test_drop_data_refuses_shared_collections(
+        self, client, mock_driver, monkeypatch
+    ):
+        """Verify drop_data is refused when another graph uses the same collections."""
+        _set_env(monkeypatch)
+        with patch(_DRIVER_TARGET, return_value=mock_driver):
+            await client.graphs.create("med", neo4j=_neo4j(), vector=_vector())
+            await client.graphs.create("drug", neo4j=_neo4j(), vector=_vector())
+            with pytest.raises(RegistryError, match="shared"):
+                await client.graphs.delete("med", drop_data=True)
+        assert {g.graph_id for g in await client.graphs.list()} == {"med", "drug"}
         await client.aclose()
 
 

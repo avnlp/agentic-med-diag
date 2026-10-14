@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+_SECRET_SETTING_KEYS = frozenset({"api_key"})
 
 
 def _utcnow() -> datetime:
@@ -42,3 +46,30 @@ class ProjectRecord(BaseModel):
     members: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=_utcnow)
     updated_at: datetime = Field(default_factory=_utcnow)
+
+    @field_validator("graph_ids")
+    @classmethod
+    def _reject_duplicate_graph_ids(cls, graph_ids: list[str]) -> list[str]:
+        """Reject a membership list that names the same graph twice."""
+        if len(set(graph_ids)) != len(graph_ids):
+            raise ValueError("graph_ids must not contain duplicates")
+        return graph_ids
+
+    @field_validator("agent_settings")
+    @classmethod
+    def _validate_agent_settings(
+        cls, settings: dict[str, Any] | None
+    ) -> dict[str, Any] | None:
+        """Require JSON-serializable overrides that carry no credentials."""
+        if settings is None:
+            return None
+        secrets = sorted(_SECRET_SETTING_KEYS & settings.keys())
+        if secrets:
+            raise ValueError(
+                f"agent_settings must not store credentials: {', '.join(secrets)}"
+            )
+        try:
+            json.dumps(settings)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("agent_settings must be JSON-serializable") from exc
+        return settings

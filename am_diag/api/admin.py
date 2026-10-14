@@ -64,10 +64,13 @@ class GraphAdmin:
             The persisted graph record.
 
         Raises:
-            RegistryError: If ``graph_id`` already exists.
+            RegistryError: If ``graph_id`` already exists, including as a live
+                graph attached to the workspace.
             ConnectionError: If a referenced env var is unset or the backend is
                 unreachable.
         """
+        if self._pool.has_graph(graph_id):
+            raise RegistryError(f"Graph already exists: {graph_id!r}")
         record = GraphRecord(
             graph_id=graph_id,
             name=name,
@@ -121,14 +124,37 @@ class GraphAdmin:
             graph_id: Graph to remove.
             drop_data: When ``True``, also delete all Neo4j nodes and the
                 graph's vector collections. Destructive and irreversible.
+
+        Raises:
+            GraphNotFoundError: If the graph is not registered.
+            RegistryError: If ``drop_data`` is set and another registered graph
+                uses one of the same vector collections.
         """
+        record = self._registry.get_graph(graph_id)
         if drop_data:
+            self._reject_shared_collections(record)
             graph = self._pool.graph(graph_id)
             await graph.graph_store.execute_query(load("admin/wipe_graph"), {})
             for collection in graph.collections.values():
                 await graph.vector_store.delete_collection(collection)
         self._registry.remove_graph(graph_id)
         await self._pool.evict_graph(graph_id)
+
+    def _reject_shared_collections(self, record: GraphRecord) -> None:
+        """Refuse to drop vector collections that another graph also uses."""
+        owned = set(record.vector.collections.values())
+        for other in self._registry.list_graphs():
+            if other.graph_id == record.graph_id:
+                continue
+            same_store = (
+                other.vector.backend == record.vector.backend
+                and other.vector.url_env == record.vector.url_env
+            )
+            if same_store and owned & set(other.vector.collections.values()):
+                raise RegistryError(
+                    f"Cannot drop data for {record.graph_id!r}: vector collections "
+                    f"are shared with graph {other.graph_id!r}"
+                )
 
 
 class ProjectAdmin:

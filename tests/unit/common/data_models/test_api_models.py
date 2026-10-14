@@ -24,6 +24,7 @@ from am_diag.common.data_models import (
     VectorConnection,
 )
 from am_diag.common.data_models.agent_events import FinalEvent, PlanEvent, TokenEvent
+from am_diag.common.schema import MEDICAL_GRAPHRAG_SCHEMA
 
 
 class TestConnections:
@@ -60,7 +61,7 @@ class TestGraphRecord:
     def test_default_schema_is_medical(self):
         """Verify the default graph schema is the medical GraphRAG schema."""
         rec = self._make()
-        assert rec.graph_schema.entity_type_names()
+        assert rec.graph_schema == MEDICAL_GRAPHRAG_SCHEMA
 
     def test_json_round_trip(self):
         """Verify a GraphRecord survives a JSON dump/load unchanged."""
@@ -75,10 +76,34 @@ class TestGraphRecord:
 
     def test_secrets_not_in_serialized_record(self):
         """Verify only env-var names are persisted, never secret values."""
-        rec = self._make()
+        rec = GraphRecord.model_validate(
+            {
+                "graph_id": "med",
+                "neo4j": {
+                    "uri": "bolt://h:7687",
+                    "user_env": "U",
+                    "password_env": "P",
+                    "password": "sentinel-secret",
+                },
+                "vector": {"url_env": "URL", "api_key": "sentinel-secret"},
+            }
+        )
         dumped = rec.model_dump_json()
+        assert "sentinel-secret" not in dumped
         assert "user_env" in dumped
         assert "password_env" in dumped
+
+    @pytest.mark.parametrize("graph_id", ["../escape", "a/b", ".hidden", "", "a b"])
+    def test_rejects_unsafe_graph_id(self, graph_id):
+        """Verify ids that are unsafe as cache file names are rejected."""
+        with pytest.raises(ValueError, match="graph_id"):
+            self._make(graph_id=graph_id)
+
+    def test_partial_collections_filled_with_defaults(self):
+        """Verify omitted collection kinds fall back to their default names."""
+        conn = VectorConnection(url_env="URL", collections={"entity": "custom"})
+        assert conn.collections["entity"] == "custom"
+        assert conn.collections["chunk"] == "am_diag_chunk"
 
 
 class TestProjectRecord:
@@ -91,6 +116,21 @@ class TestProjectRecord:
         assert loaded.project_id == "clinical"
         assert loaded.graph_ids == ["med", "drug"]
         assert loaded.members == []
+
+    def test_rejects_duplicate_graph_ids(self):
+        """Verify a project cannot list the same graph twice."""
+        with pytest.raises(ValueError, match="duplicates"):
+            ProjectRecord(project_id="clinical", graph_ids=["med", "med"])
+
+    def test_rejects_credentials_in_agent_settings(self):
+        """Verify agent settings cannot carry an API key into the registry."""
+        with pytest.raises(ValueError, match="api_key"):
+            ProjectRecord(project_id="clinical", agent_settings={"api_key": "x"})
+
+    def test_rejects_non_json_agent_settings(self):
+        """Verify agent settings must be JSON-serializable."""
+        with pytest.raises(ValueError, match="JSON"):
+            ProjectRecord(project_id="clinical", agent_settings={"model": object()})
 
 
 class TestJobModels:

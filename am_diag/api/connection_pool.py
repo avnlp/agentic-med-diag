@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 
 from am_diag.api.errors import ConnectionError as WorkspaceConnectionError
+from am_diag.api.errors import RegistryError
 from am_diag.api.graph import Graph
 from am_diag.api.registry import Registry
 from am_diag.common.data_models.connection import VectorConnection
@@ -36,10 +37,10 @@ def _require_env(name: str) -> str:
 def _vector_settings(vector: VectorConnection) -> QdrantSettings | WeaviateSettings:
     """Resolve a vector connection's env-ref secrets into store settings."""
     url = _require_env(vector.url_env)
-    api_key = os.environ.get(vector.api_key_env) if vector.api_key_env else None
+    api_key = _require_env(vector.api_key_env) if vector.api_key_env is not None else ""
     if vector.backend == "weaviate":
-        return WeaviateSettings(url=url, api_key=api_key or "")
-    return QdrantSettings(url=url, api_key=api_key or "")
+        return WeaviateSettings(url=url, api_key=api_key)
+    return QdrantSettings(url=url, api_key=api_key)
 
 
 def build_graph(
@@ -122,6 +123,10 @@ class ConnectionPool:
             self._graphs[graph_id] = graph
         return graph
 
+    def has_graph(self, graph_id: str) -> bool:
+        """Return whether a live graph is cached under ``graph_id``."""
+        return graph_id in self._graphs
+
     def attach(self, graph: Graph) -> None:
         """Register an already-built live graph under its id.
 
@@ -132,7 +137,12 @@ class ConnectionPool:
         is closed by ``close``/``evict_graph`` alongside pool-built graphs. This
         avoids owned-vs-borrowed bookkeeping; callers who want to retain control
         of a graph's lifecycle should not attach it.
+
+        Raises:
+            RegistryError: If a live graph is already cached under the same id.
         """
+        if graph.graph_id in self._graphs:
+            raise RegistryError(f"Graph already attached: {graph.graph_id!r}")
         self._graphs[graph.graph_id] = graph
 
     async def evict_graph(self, graph_id: str) -> None:
@@ -145,7 +155,18 @@ class ConnectionPool:
             await graph.close()
 
     async def close(self) -> None:
-        """Close every cached graph and clear the pool."""
-        for graph in list(self._graphs.values()):
-            await graph.close()
+        """Close every cached graph and clear the pool.
+
+        A graph that fails to close does not stop the others from closing; the
+        first failure is re-raised after cleanup.
+        """
+        graphs = list(self._graphs.values())
         self._graphs.clear()
+        first_error: Exception | None = None
+        for graph in graphs:
+            try:
+                await graph.close()
+            except Exception as exc:  # noqa: BLE001
+                first_error = first_error or exc
+        if first_error is not None:
+            raise first_error

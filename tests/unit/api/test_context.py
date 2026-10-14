@@ -2,9 +2,23 @@
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 from am_diag.api.context import pack_context
+from am_diag.common.data_models.chunk import Chunk
 from am_diag.common.data_models.entity import Entity
 from am_diag.common.data_models.search import CypherRow, SearchResult
+
+
+def _chunk(text: str) -> Chunk:
+    return Chunk(
+        text=text,
+        document_id=uuid4(),
+        document_source="test",
+        chunk_index=0,
+        chunk_size=len(text),
+        cut_type="recursive",
+    )
 
 
 def _result(item) -> SearchResult:
@@ -25,6 +39,21 @@ class TestPackContext:
 
         assert "## Entities\n- metformin (Drug)" in packed
         assert "## Query results\n- drug: metformin, n: 3" in packed
+
+    def test_skipped_section_does_not_consume_later_budget(self) -> None:
+        """A header dropped because its first item overflows frees its space."""
+        results = [
+            _result(Entity(name="aspirin", label="Drug")),
+            _result(_chunk("x" * 100)),
+            _result(CypherRow(values={"n": 1})),
+        ]
+
+        packed = pack_context(results, max_characters=60)
+
+        assert "## Entities\n- aspirin (Drug)" in packed
+        assert "## Passages" not in packed
+        assert "## Query results\n- n: 1" in packed
+        assert len(packed) <= 60
 
     def test_cypher_row_round_trips_through_search_result(self) -> None:
         """A CypherRow survives SearchResult validation as itself."""

@@ -339,15 +339,23 @@ class Graph:
         """
         if read_only and _has_write_clause(cypher):
             raise SchemaError("Write Cypher rejected in read-only query()")
-        return await self._graph_store.execute_query(cypher, params)
+        return await self._graph_store.execute_query(
+            cypher, params, read_only=read_only
+        )
 
     async def ingest(
         self, sources: Any, *, config: JobConfig | None = None
     ) -> IngestionJob:
-        """Create a durable ingestion job for one or more sources (does not run)."""
+        """Create a durable ingestion job for one or more sources (does not run).
+
+        Raises:
+            ValueError: If ``sources`` is an empty list.
+        """
         from am_diag.common.data_models.job import JobRecord  # noqa: PLC0415
 
         source_list = sources if isinstance(sources, list) else [sources]
+        if not source_list:
+            raise ValueError("ingest() requires at least one source")
         record = JobRecord(
             job_id=new_job_id(),
             kind="ingestion",
@@ -377,15 +385,21 @@ class Graph:
         """Ingest inline content now and return a summary report.
 
         Raises:
-            ValueError: If no content is supplied.
+            ValueError: If no content is supplied, or if text or documents are
+                mixed with entities or relations.
         """
         source = self._inline_source(
             text, documents, entities, relations, source_description
         )
         job = await self.ingest([source])
         record = await job.run()
+        if record.progress.failed or not record.progress.succeeded:
+            return IngestionReport(batch_id=record.job_id)
         return IngestionReport(
-            batch_id=record.job_id, chunks_ingested=record.progress.succeeded
+            batch_id=record.job_id,
+            documents_ingested=len(documents or []) + (text is not None),
+            entities_ingested=len(entities or []),
+            relations_ingested=len(relations or []),
         )
 
     async def add_fact(
@@ -434,12 +448,18 @@ class Graph:
         source_description: str | None,
     ) -> Any:
         """Adapt raw inline content into a one-batch source for the job engine."""
-        if text is not None or documents:
+        has_text = text is not None or bool(documents)
+        has_graph = bool(entities or relations)
+        if has_text and has_graph:
+            raise ValueError(
+                "add() takes text/documents or entities/relations, not both"
+            )
+        if has_text:
             docs = list(documents or [])
             if text is not None:
                 docs.append(Document(text=text, source=source_description or "inline"))
             return _InlineCorpusSource(docs)
-        if entities or relations:
+        if has_graph:
             kg = KnowledgeGraph(
                 entities=list(entities or []),
                 relations=list(relations or []),
@@ -449,9 +469,12 @@ class Graph:
         raise ValueError("add() requires text, documents, entities, or relations")
 
     async def close(self) -> None:
-        """Close the graph store and vector store connections."""
+        """Close the graph store, vector store, embedder, and reranker."""
         await self._graph_store.close()
         await self._vector_store.close()
+        await self._embedder.close()
+        if self._reranker is not None:
+            await self._reranker.close()
 
     async def __aenter__(self) -> Graph:
         """Enter the async context, returning self."""

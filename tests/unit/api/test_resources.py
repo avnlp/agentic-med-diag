@@ -63,6 +63,20 @@ class TestEntityResource:
         with pytest.raises(SchemaError):
             await EntityResource(store).update("eid", attributes={"label": "X"})
 
+    async def test_update_rejects_core_field_attribute(self):
+        """Verify attributes cannot overwrite a core model field such as score."""
+        store = SimpleNamespace(update_entity=AsyncMock())
+        with pytest.raises(SchemaError):
+            await EntityResource(store).update("eid", attributes={"score": 5})
+        store.update_entity.assert_not_awaited()
+
+    async def test_list_with_zero_limit_returns_empty_page(self):
+        """Verify a zero limit yields an empty page instead of an IndexError."""
+        store = SimpleNamespace(list_entities=AsyncMock(return_value=[]))
+        page = await EntityResource(store).list(limit=0)
+        assert len(page) == 0
+        assert page.next_cursor is None
+
     async def test_delete_calls_store(self):
         """Verify delete delegates to the store's cascade delete."""
         store = SimpleNamespace(delete_entity=AsyncMock())

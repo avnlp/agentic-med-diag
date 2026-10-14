@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from am_diag.common.data_models.search import SearchResult
 from am_diag.retrieval.config import SearchConfig
 from am_diag.retrieval.filters import SearchFilters
+from am_diag.retrieval.recipes import ALL_RECIPES
 from am_diag.retrieval.rerank.cross_encoder import cross_encoder_rerank
 from am_diag.retrieval.rerank.rrf import rrf
 from am_diag.vector.reranking.base import Reranker
@@ -27,6 +28,25 @@ if TYPE_CHECKING:
 def _resolve_graphs(graphs: list[Graph]) -> list[Graph]:
     """Return a shallow copy of live graphs for concurrent fan-out."""
     return list(graphs)
+
+
+def _with_candidate_limit(recipe: SearchConfig | str, limit: int) -> SearchConfig:
+    """Return ``recipe`` with a per-graph limit of at least ``limit``.
+
+    Each graph truncates to its recipe limit before fusion, so a federated
+    ``limit`` above that cap would otherwise return fewer results than exist.
+
+    Raises:
+        ValueError: If ``recipe`` is an unknown recipe name.
+    """
+    if isinstance(recipe, str):
+        named = dict(ALL_RECIPES)
+        if recipe not in named:
+            raise ValueError(f"Unknown recipe: {recipe!r}; options: {list(named)}")
+        recipe = named[recipe]
+    if recipe.limit >= limit:
+        return recipe
+    return recipe.model_copy(update={"limit": limit})
 
 
 async def federated_search(
@@ -56,8 +76,12 @@ async def federated_search(
     targets = _resolve_graphs(graphs)
     if not targets:
         return []
+    per_graph_recipe = _with_candidate_limit(recipe, limit)
     per_graph = await asyncio.gather(
-        *(graph.search(query, recipe=recipe, filters=filters) for graph in targets)
+        *(
+            graph.search(query, recipe=per_graph_recipe, filters=filters)
+            for graph in targets
+        )
     )
     if reranker is not None:
         flat = [result for sublist in per_graph for result in sublist]
@@ -72,13 +96,12 @@ class FederatedSearch:
     wrapping a project's graphs in this adapter federates the agent unchanged.
 
     Args:
-        client: The owning client.
-        graph_ids: Graphs this adapter searches.
+        graphs: Live graphs this adapter searches.
         limit: Maximum fused results returned per call.
     """
 
     def __init__(self, graphs: list[Graph], *, limit: int = 20) -> None:
-        """Bind the adapter to a client and a fixed set of graphs."""
+        """Bind the adapter to a fixed set of live graphs."""
         self._graphs = list(graphs)
         self._limit = limit
 

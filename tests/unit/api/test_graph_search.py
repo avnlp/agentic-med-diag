@@ -57,7 +57,7 @@ def _client_with_fake_graph(tmp_path, search_results=None, execute_rows=None):
     graph = Graph(
         graph_store=graph_store,
         vector_store=SimpleNamespace(close=AsyncMock()),
-        embedder=SimpleNamespace(model_id="fake-model"),
+        embedder=SimpleNamespace(model_id="fake-model", close=AsyncMock()),
         search_engine=search_engine,
         schema=MEDICAL_GRAPHRAG_SCHEMA,
         collections=_COLLECTIONS,
@@ -97,11 +97,12 @@ class TestGraphSearch:
     async def test_context_respects_budget(self, tmp_path):
         """Verify context output never exceeds the character budget."""
         results = [
-            SearchResult(item=_chunk("x" * 500), score=1.0, source="chunk")
+            SearchResult(item=_chunk("x" * 50), score=1.0, source="chunk")
             for _ in range(10)
         ]
         client, _ = _client_with_fake_graph(tmp_path, search_results=results)
         ctx = await client.graph("med").context("q", max_characters=200)
+        assert "x" * 50 in ctx
         assert len(ctx) <= 200
 
 
@@ -120,6 +121,7 @@ class TestGraphQuery:
         out = await client.graph("med").query("MATCH (n) RETURN n LIMIT 1")
         assert out == [{"n": 1}]
         graph.graph_store.execute_query.assert_awaited_once()
+        assert graph.graph_store.execute_query.await_args.kwargs["read_only"] is True
 
     async def test_write_allowed_when_not_read_only(self, tmp_path):
         """Verify write Cypher is forwarded when read_only is disabled."""

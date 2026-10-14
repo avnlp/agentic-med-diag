@@ -75,6 +75,44 @@ class TestRegistry:
         assert path.exists()
         assert not (path.with_suffix(path.suffix + ".tmp")).exists()
 
+    def test_failed_replace_preserves_previous_registry(self, tmp_path, monkeypatch):
+        """Verify a failed write leaves the file and the in-memory state unchanged."""
+        path = tmp_path / "registry.json"
+        reg = Registry(path)
+        reg.add_graph(_graph("med"))
+        before = path.read_text("utf-8")
+
+        def fail_replace(src, dst):
+            raise OSError("disk full")
+
+        monkeypatch.setattr("am_diag.api.registry.os.replace", fail_replace)
+        with pytest.raises(OSError, match="disk full"):
+            reg.add_graph(_graph("drug"))
+
+        assert path.read_text("utf-8") == before
+        assert [g.graph_id for g in reg.list_graphs()] == ["med"]
+        with pytest.raises(GraphNotFoundError):
+            reg.get_graph("drug")
+
+    def test_stale_instance_does_not_overwrite_newer_records(self, tmp_path):
+        """Verify a second registry on the same file keeps the first one's writes."""
+        path = tmp_path / "registry.json"
+        first = Registry(path)
+        second = Registry(path)
+        first.add_graph(_graph("med"))
+        second.add_graph(_graph("drug"))
+
+        ids = {g.graph_id for g in Registry(path).list_graphs()}
+        assert ids == {"med", "drug"}
+
+    def test_returned_records_are_copies(self, tmp_path):
+        """Verify editing a returned record does not change stored state."""
+        reg = Registry(tmp_path / "registry.json")
+        reg.add_graph(_graph())
+        reg.get_graph("med").name = "edited"
+        reg.list_graphs()[0].name = "edited"
+        assert reg.get_graph("med").name is None
+
     def test_only_env_names_persisted(self, tmp_path):
         """Verify the on-disk file stores env-var names, not secret values."""
         path = tmp_path / "registry.json"
