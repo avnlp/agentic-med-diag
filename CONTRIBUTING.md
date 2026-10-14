@@ -28,7 +28,7 @@ The project uses [uv](https://github.com/astral-sh/uv) for dependency management
    uv run pre-commit install
    ```
 
-4. Copy the example environment file and add your credentials. Integration tests and the pipelines need a Neo4j instance, a vector store (Qdrant or Weaviate), and an OpenAI-compatible LLM endpoint:
+4. Copy the example environment file and add your credentials. Integration tests and the ingestion and QA commands need a Neo4j instance, a vector store (Qdrant or Weaviate), and an OpenAI-compatible LLM endpoint:
 
    ```bash
    cp .env.example .env
@@ -56,7 +56,19 @@ am_diag/
 ├── agents/                 # DeepAgents harness
 ├── llm/                    # BAML sources + generated client
 └── loaders/                # corpus loaders + dataset loaders
-tests/am_diag/              # mirrors the am_diag/ package structure
+tests/
+├── _env.py                 # shared env helpers
+├── conftest.py             # directory-based collection hook
+├── unit/                   # unit tests — mock all external services
+│   ├── conftest.py         # env defaults for unit tests
+│   ├── ingestion/          # mirrors am_diag/ingestion
+│   ├── loaders/            # mirrors am_diag/loaders
+│   ├── db/                 # mirrors am_diag/db
+│   ├── ...                 # other modules mirroring am_diag/
+└── integration/            # integration tests — external services
+    ├── conftest.py         # env defaults
+    ├── ingestion/          # mirrors am_diag/ingestion
+    └── loaders/            # mirrors am_diag/loaders
 ```
 
 The package uses a flat layout (`am_diag/` at the root, no `src/`).
@@ -83,28 +95,38 @@ Two architecture rules are enforced by guard tests:
 
 ## Testing
 
-- Tests mirror the `am_diag/` structure under `tests/am_diag/`, using pytest classes (one class per file).
+The test suite follows a directory-based split with two distinct conventions:
+
+1. **Unit test** → put it under `tests/unit/…`, name `test_*.py`, no markers.
+   - Sockets are blocked by default (`--disable-socket`); asyncio's AF_UNIX wakeup pipe is covered by `--allow-unix-socket`.
+   - **Never** add `enable_socket` — if a unit test raises `SocketBlockedError`, fix the mock instead.
+   - Use `@pytest.mark.allow_hosts([...])` only for intentional loopback-server tests, with an inline comment.
+
+2. **Integration test** → put it under `tests/integration/…`, name `test_*.py` (no `_integration` suffix).
+   - Markers `integration` + `enable_socket` + `flaky(reruns=3, reruns_delay=30, rerun_except=[AssertionError])` are **auto-applied** by `tests/conftest.py` based on the directory — do not add them manually.
+   - The auto-marking hook gracefully skips integration tests that require missing external service configuration (checked against process env and repo-root `.env`). Real creds come from env/`.env`; the integration conftest only fills *absent* import-safety placeholders.
+
 - `pytest-asyncio` runs in `auto` mode — no `@pytest.mark.asyncio` decorator is needed.
-- `pytest-socket` disables network access by default. Mock all external services (Neo4j, Qdrant, Weaviate, HuggingFace) in unit tests, patching at the driver level. Tests that need real external services add `@pytest.mark.integration`.
-- Tests run in parallel — avoid shared mutable state between test classes.
+- `--strict-markers` and `--strict-config` are enabled — a typo'd marker or misused manual marker raises a hard error.
+- Mock all external services (Neo4j, Qdrant, Weaviate, HuggingFace) in unit tests, patching at the driver level.
+- Unit tests run in parallel (`-n auto --dist loadscope`); integration tests also run in parallel but can be adjusted per-service if shared-state races arise. Avoid shared mutable state between test classes.
+- The `testpaths` default `["tests/unit"]` ensures a plain `pytest` only discovers unit tests. Use the `make` targets below for all common workflows.
 
 ```bash
-make test                  # unit tests (no network)
-make test-integration      # integration tests (requires external services)
-make test-cov              # tests with coverage
+make test                  # unit tests with coverage
+make test-integration      # integration tests (requires external services) — runs tests/integration
 
 # run a single file, class, or test
-uv run pytest tests/am_diag/db/graph/test_client.py::TestNeo4jClient -v
-uv run pytest tests/am_diag/db/vector/test_qdrant.py -k "test_search" -v
+uv run pytest tests/unit/db/graph/test_client.py::TestNeo4jClient -v
+uv run pytest tests/unit/db/vector/test_qdrant.py -k "test_search" -v
 ```
 
 ## Make Commands
 
 ```bash
 make sync                  # install all dependencies
-make test                  # run unit tests
+make test                  # run unit tests with coverage
 make test-integration      # run integration tests
-make test-cov              # tests with coverage
 make lint-fmt              # format + auto-fix
 make lint-check            # check only, no modifications
 make lint-typing           # type check with ty

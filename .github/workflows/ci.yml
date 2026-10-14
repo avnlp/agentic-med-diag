@@ -157,7 +157,7 @@ jobs:
         run: make sync
 
       - name: Run tests with coverage
-        run: make test-ci
+        run: make test
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
