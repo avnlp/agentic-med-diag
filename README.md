@@ -322,6 +322,10 @@ RETURN d.name, r.type, x.name
 
 Ingesting a newer release onto a graph built from an older one leaves stale edges and properties behind. Use a new graph, or wipe the old one first, and then ingest again.
 
+#### Loading one OptimusKG dataset
+
+Each of OptimusKG's input datasets also has its own loader. Pass its name instead of `optimuskg`: `uberon`, `mondo`, `hpo`, `gene_ontology`, `reactome`, `opentargets`, `bgee`, `drugbank`, `disgenet`, `drugcentral`, `onsides`, `ctd` or `ppi`. Loaders for `opentargets`, `bgee`, `drugbank`, `disgenet`, `drugcentral`, `ctd` and `ppi` also need `--reference-dir`. The DrugBank, DrugCentral and Open Targets loaders write one edge for each pair of nodes, as the released graph does. The edge type is the highest-priority relation that the dataset asserts, and `asserted_relations` and `relation_conflict` record the rest. A single dataset sees only its own statements, so an edge from one dataset can have a different type than the same pair in the released graph, where all datasets are merged.
+
 ### Programmatic Usage
 
 ```python

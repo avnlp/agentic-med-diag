@@ -5,7 +5,7 @@ from __future__ import annotations
 from am_diag.common.data_models.schema import EntityType, GraphSchema, RelationType
 
 
-_RELATIONS = ["INDICATION", "CONTRAINDICATION"]
+_RELATIONS = ["INDICATION", "CONTRAINDICATION", "OFF_LABEL_USE"]
 
 DRUGCENTRAL_SCHEMA = GraphSchema(
     entity_types=[
@@ -34,7 +34,12 @@ DRUGCENTRAL_SCHEMA = GraphSchema(
             glirel_label=relation,
             head_labels=["Drug"],
             tail_labels=["Disease", "Phenotype"],
-            properties=["sources", "structural_label"],
+            properties=[
+                "sources",
+                "structural_label",
+                "asserted_relations",
+                "relation_conflict",
+            ],
         )
         for relation in _RELATIONS
     ],

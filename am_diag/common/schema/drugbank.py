@@ -5,7 +5,12 @@ from __future__ import annotations
 from am_diag.common.data_models.schema import EntityType, GraphSchema, RelationType
 
 
-_DRG_GEN = ["sources", "structural_label"]
+_DRG_GEN = [
+    "sources",
+    "structural_label",
+    "asserted_relations",
+    "relation_conflict",
+]
 _DRG_DRG = ["sources", "structural_label", "interaction_description"]
 
 _DRUG_GENE_RELATIONS = ["TARGET", "ENZYME", "TRANSPORTER", "CARRIER", "OTHER"]

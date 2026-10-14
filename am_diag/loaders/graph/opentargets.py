@@ -2,9 +2,10 @@
 
 Reads the Open Targets parquet exports (already keyed on Ensembl genes, ChEMBL
 drugs, and EFO/MONDO/HP/GO/UBERON entities, so no harmonization is needed) and emits:
-target-(disease/phenotype/anatomy/GO) ``ASSOCIATED_WITH`` edges, the disease ``PARENT``
-hierarchy, disease ``HAS_PHENOTYPE`` links, drug ``INDICATION`` edges, and drug-target
-mechanism edges (one relation per action type). License: CC0.
+target-(disease/phenotype/anatomy/GO) ``ASSOCIATED_WITH`` edges, the disease and
+phenotype ``PARENT`` hierarchies, disease ``HAS_PHENOTYPE`` links, drug
+``INDICATION`` edges, and drug-target mechanism edges (one relation per action type).
+License: CC0.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from am_diag.loaders.graph.base import GraphLoader
 from am_diag.loaders.graph.enricher import NodeEnricher
 from am_diag.loaders.graph.formats import go_term_namespaces
 from am_diag.loaders.graph.reference_data import ReferenceData
+from am_diag.loaders.graph.relations import collapse_relations
 from am_diag.loaders.graph.vocab import (
     Node,
     Relation,
@@ -64,6 +66,7 @@ class OpenTargetsGraphLoader(GraphLoader):
             [
                 self._association_edges(),
                 self._disease_disease(),
+                self._phenotype_phenotype(),
                 self._disease_phenotype(),
                 self._drug_disease(),
                 self._drug_gene(),
@@ -131,6 +134,26 @@ class OpenTargetsGraphLoader(GraphLoader):
             .unique(subset=["from", "to"])
         )
 
+    def _phenotype_phenotype(self) -> pl.DataFrame:
+        phenotype = self._ref.opentargets_disease.select(
+            pl.col("id"), pl.col("metadata").struct.field("parents").alias("parents")
+        )
+        return (
+            phenotype.explode("parents")
+            .filter(
+                pl.col("id").str.starts_with("HP_")
+                & pl.col("parents").str.starts_with("HP_")
+            )
+            .select(
+                pl.col("parents").alias("from"),
+                pl.col("id").alias("to"),
+                pl.lit(Relation.PARENT.value).alias("type"),
+                pl.lit(structural_label(Node.PHENOTYPE, Node.PHENOTYPE)).alias("label"),
+                pl.lit(_SRC).alias("sources"),
+            )
+            .unique(subset=["from", "to"])
+        )
+
     def _disease_phenotype(self) -> pl.DataFrame:
         return (
             self._read("disease_phenotype")
@@ -185,7 +208,7 @@ class OpenTargetsGraphLoader(GraphLoader):
             .with_columns(
                 pl.col("action_type")
                 .str.to_uppercase()
-                .str.replace_all(" ", "_")
+                .str.replace_all("[ -]", "_")
                 .alias("action")
             )
             .with_columns(
@@ -195,13 +218,16 @@ class OpenTargetsGraphLoader(GraphLoader):
                 .alias("type")
             )
         )
-        return normalized.select(
-            pl.col("chembl_ids").alias("from"),
-            pl.col("targets").alias("to"),
-            pl.col("type"),
-            pl.lit(structural_label(Node.DRUG, Node.GENE)).alias("label"),
-            pl.lit(_SRC).alias("sources"),
-        ).unique(subset=["from", "to", "type"])
+        return collapse_relations(
+            normalized.select(
+                pl.col("chembl_ids").alias("from"),
+                pl.col("targets").alias("to"),
+                pl.col("type"),
+                pl.lit(structural_label(Node.DRUG, Node.GENE)).alias("label"),
+                pl.lit(_SRC).alias("sources"),
+            ),
+            Source.OPEN_TARGETS,
+        )
 
     def _nodes(self, edges: pl.DataFrame) -> pl.DataFrame:
         heads = edges.select(
