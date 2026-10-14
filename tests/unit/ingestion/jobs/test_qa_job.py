@@ -168,3 +168,23 @@ class TestQAJob:
         assert calls == 3
         items = (tmp_path / "jobs" / record.job_id / "items.jsonl").read_text("utf-8")
         assert '"error":null' in items
+
+    async def test_items_expose_answers_and_errors_in_question_order(self, tmp_path):
+        """Verify items() returns each question's output or error in order."""
+
+        async def answer(question, graphs=None):
+            if question == "bad":
+                raise RuntimeError("boom")
+            return ClinicalAnswer(answer="ok")
+
+        cache = IngestionCache(tmp_path / "med.db")
+        job = _make_job(
+            tmp_path, cache, SimpleNamespace(answer=answer), ["good", "bad"]
+        )
+        await job.run()
+
+        good, bad = job.items()
+
+        assert good.ref == {"question": "good"}
+        assert good.output is not None
+        assert bad.error == {"type": "RuntimeError", "message": "boom"}

@@ -76,6 +76,10 @@ class QAJob:
         """Return the questions that failed after exhausting retries."""
         return self._ledger.failures()
 
+    def items(self) -> list[JobItem]:
+        """Return every question item (answers and errors) in question order."""
+        return sorted(self._ledger.items.values(), key=lambda i: i.sequence_index)
+
     async def run(self) -> JobRecord:
         """Answer every question, serving cache hits and isolating failures."""
         self._ledger.begin()
