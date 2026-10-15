@@ -68,6 +68,48 @@ class TestDrugBankLoader:
         assert drug["label"] == "Drug"
         assert drug["name"] == "aspirin"
 
+    def test_drug_target_without_chembl_xref_keeps_drugbank_id(
+        self, reference_dir: Path
+    ) -> None:
+        """A target of a drug with no ChEMBL cross-reference is not dropped."""
+        src = reference_dir / "drugbank"
+        _write_drugbank(src)
+        (src / "drugbank_all_target_polypeptide_ids.csv").write_text(
+            _POLY_HEADER + "Humans,P1,DB99999,p53 protein\n", encoding="utf-8"
+        )
+        reference = ReferenceData(reference_dir)
+        loader = DrugBankGraphLoader(
+            src, harmonizer=Harmonizer(reference), enricher=NodeEnricher(reference)
+        )
+        nodes, edges = loader.build_frames()
+
+        drug_gene = edges.filter(edges["label"] == "DRG-GEN").row(0, named=True)
+        assert drug_gene["from"] == "DRUGBANK:DB99999"
+        assert drug_gene["to"] == "ENSG1"
+        assert "DRUGBANK:DB99999" in nodes["curie"].to_list()
+
+    def test_target_and_enzyme_roles_on_one_pair_become_one_edge(
+        self, reference_dir: Path
+    ) -> None:
+        """A drug that is both target and enzyme of a gene keeps both as assertions."""
+        src = reference_dir / "drugbank"
+        _write_drugbank(src)
+        (src / "drugbank_all_enzyme_polypeptide_ids.csv").write_text(
+            _POLY_HEADER + "Humans,P1,DB00945,p53 protein\n", encoding="utf-8"
+        )
+        reference = ReferenceData(reference_dir)
+        loader = DrugBankGraphLoader(
+            src, harmonizer=Harmonizer(reference), enricher=NodeEnricher(reference)
+        )
+        _, edges = loader.build_frames()
+
+        drug_gene = edges.filter(edges["label"] == "DRG-GEN")
+        assert drug_gene.height == 1
+        edge = drug_gene.row(0, named=True)
+        assert edge["type"] == "ENZYME"
+        assert edge["asserted_relations"] == ["ENZYME", "TARGET"]
+        assert edge["relation_conflict"] is False
+
     def test_schema_covers_emitted_types(self, reference_dir: Path) -> None:
         """Emitted labels and relation types fall within the authored schema."""
         src = reference_dir / "drugbank"

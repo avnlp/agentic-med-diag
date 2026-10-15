@@ -16,9 +16,15 @@ DRUG_GENE_ACTIONS = [
     "AGONIST",
     "ALLOSTERIC_ANTAGONIST",
     "ANTAGONIST",
+    "ANTISENSE_INHIBITOR",
     "BINDING_AGENT",
     "BLOCKER",
+    "CROSS_LINKING_AGENT",
     "DEGRADER",
+    "DISRUPTING_AGENT",
+    "EXOGENOUS_GENE",
+    "EXOGENOUS_PROTEIN",
+    "HYDROLYTIC_ENZYME",
     "INHIBITOR",
     "INVERSE_AGONIST",
     "MODULATOR",
@@ -29,9 +35,12 @@ DRUG_GENE_ACTIONS = [
     "PARTIAL_AGONIST",
     "POSITIVE_ALLOSTERIC_MODULATOR",
     "POSITIVE_MODULATOR",
+    "PROTEOLYTIC_ENZYME",
     "RELEASING_AGENT",
+    "RNAI_INHIBITOR",
     "STABILISER",
     "SUBSTRATE",
+    "VACCINE_ANTIGEN",
 ]
 
 _GENE_ASSOCIATION_HEADS = [
@@ -88,8 +97,17 @@ OPEN_TARGETS_SCHEMA = GraphSchema(
             ("evidence_score", "evidence_count"),
         ),
         _relation("PARENT", ["Disease"], ["Disease"]),
+        _relation("PARENT", ["Phenotype"], ["Phenotype"]),
         _relation("HAS_PHENOTYPE", ["Disease"], ["Phenotype"]),
         _relation("INDICATION", ["Drug"], ["Disease"]),
-        *[_relation(action, ["Drug"], ["Gene"]) for action in DRUG_GENE_ACTIONS],
+        *[
+            _relation(
+                action,
+                ["Drug"],
+                ["Gene"],
+                ("asserted_relations", "relation_conflict"),
+            )
+            for action in DRUG_GENE_ACTIONS
+        ],
     ],
 )

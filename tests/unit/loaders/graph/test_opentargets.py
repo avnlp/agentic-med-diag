@@ -113,6 +113,76 @@ class TestOpenTargetsLoader:
         assert drug["label"] == "Drug"
         assert drug["name"] == "aspirin"
 
+    def test_phenotype_hierarchy_and_new_action_types(
+        self, reference_dir: Path
+    ) -> None:
+        """HP parents become PHE-PHE edges; newer action types keep their name."""
+        _write_opentargets(reference_dir)
+        pl.DataFrame(
+            {
+                "id": ["HP_0002"],
+                "name": ["child phenotype"],
+                "description": ["d"],
+                "metadata": [{"db_xrefs": [], "parents": ["HP_0001"]}],
+            }
+        ).write_parquet(reference_dir / "opentargets" / "disease" / "part-1.parquet")
+        mechanism_dir = reference_dir / "opentargets" / "drug_mechanism_of_action"
+        pl.DataFrame(
+            {
+                "targets": [["ENSG1"], ["ENSG2"]],
+                "chembl_ids": [["CHEMBL25"], ["CHEMBL100"]],
+                "metadata": [
+                    {"action_type": "CROSS-LINKING AGENT"},
+                    {"action_type": "RNAI INHIBITOR"},
+                ],
+            }
+        ).write_parquet(mechanism_dir / "part-0.parquet")
+        reference = ReferenceData(reference_dir)
+        loader = OpenTargetsGraphLoader(
+            reference_dir, reference=reference, enricher=NodeEnricher(reference)
+        )
+        _, edges = loader.build_frames()
+
+        by_pair = {(r["from"], r["to"]): r for r in edges.iter_rows(named=True)}
+        assert by_pair[("HP_0001", "HP_0002")]["label"] == "PHE-PHE"
+        assert by_pair[("HP_0001", "HP_0002")]["type"] == "PARENT"
+        assert by_pair[("CHEMBL25", "ENSG1")]["type"] == "CROSS_LINKING_AGENT"
+        assert by_pair[("CHEMBL100", "ENSG2")]["type"] == "RNAI_INHIBITOR"
+        assert set(edges["type"].to_list()) <= loader.graph_schema.relation_type_names()
+
+    def test_opposing_actions_on_one_pair_become_one_flagged_edge(
+        self, reference_dir: Path
+    ) -> None:
+        """Activator and inhibitor actions on one pair collapse and flag a conflict."""
+        _write_opentargets(reference_dir)
+        mechanism_dir = reference_dir / "opentargets" / "drug_mechanism_of_action"
+        pl.DataFrame(
+            {
+                "targets": [["ENSG1"]],
+                "chembl_ids": [["CHEMBL25"]],
+                "metadata": [
+                    {
+                        "action_type": "ACTIVATOR",
+                        "target_name": "p53",
+                        "target_type": "protein",
+                        "references": ["PMID:3"],
+                    }
+                ],
+            }
+        ).write_parquet(mechanism_dir / "part-1.parquet")
+        reference = ReferenceData(reference_dir)
+        loader = OpenTargetsGraphLoader(
+            reference_dir, reference=reference, enricher=NodeEnricher(reference)
+        )
+        _, edges = loader.build_frames()
+
+        pair = edges.filter((edges["from"] == "CHEMBL25") & (edges["to"] == "ENSG1"))
+        assert pair.filter(pair["label"] == "DRG-GEN").height == 1
+        edge = pair.filter(pair["label"] == "DRG-GEN").row(0, named=True)
+        assert edge["type"] == "ACTIVATOR"
+        assert edge["asserted_relations"] == ["ACTIVATOR", "INHIBITOR"]
+        assert edge["relation_conflict"] is True
+
     def test_schema_covers_emitted_types(self, reference_dir: Path) -> None:
         """Emitted labels and relation types fall within the authored schema."""
         _write_opentargets(reference_dir)

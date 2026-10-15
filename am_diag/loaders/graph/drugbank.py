@@ -18,6 +18,7 @@ from am_diag.loaders.graph.base import GraphLoader
 from am_diag.loaders.graph.enricher import NodeEnricher
 from am_diag.loaders.graph.formats import read_drugbank_interactions_xml
 from am_diag.loaders.graph.harmonizer import Harmonizer
+from am_diag.loaders.graph.relations import collapse_relations
 from am_diag.loaders.graph.vocab import (
     Node,
     Relation,
@@ -100,22 +101,25 @@ class DrugBankGraphLoader(GraphLoader):
 
     def _drug_gene_edges(self) -> pl.DataFrame:
         raw = self._raw_drug_gene()
-        mapped = self._harmonizer.to_ensembl(
-            self._harmonizer.to_chembl(raw, "drug_bank_id"), "ncbi_gene_id"
-        )
-        return (
+        with_chembl = raw.join(
+            self._harmonizer.chembl_drugbank,
+            left_on="drug_bank_id",
+            right_on="drugbank_id",
+            how="left",
+        ).with_columns(pl.coalesce("chembl_id", "drug_bank_id").alias("chembl_id"))
+        mapped = self._harmonizer.to_ensembl(with_chembl, "ncbi_gene_id")
+        return collapse_relations(
             mapped.select(
                 pl.col("chembl_id").alias("from"),
                 pl.col("ensembl_id").alias("to"),
                 pl.col("role")
                 .replace_strict(_RELATION_BY_ROLE, default=Relation.OTHER.value)
                 .alias("type"),
-            )
-            .unique(["from", "to", "type"])
-            .with_columns(
+            ).with_columns(
                 pl.lit(structural_label(Node.DRUG, Node.GENE)).alias("label"),
                 pl.lit([Source.DRUG_BANK.value]).alias("sources"),
-            )
+            ),
+            Source.DRUG_BANK,
         )
 
     def _drug_drug_edges(self) -> pl.DataFrame:

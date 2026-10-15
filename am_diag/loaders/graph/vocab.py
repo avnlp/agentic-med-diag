@@ -86,6 +86,7 @@ class Relation(StrEnum):
     # DrugCentral / Open Targets drug-disease.
     INDICATION = "INDICATION"
     CONTRAINDICATION = "CONTRAINDICATION"
+    OFF_LABEL_USE = "OFF_LABEL_USE"
     # OnSIDES drug-phenotype.
     ADVERSE_DRUG_REACTION = "ADVERSE_DRUG_REACTION"
     # PrimeKG / PPI gene-gene.

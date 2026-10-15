@@ -31,10 +31,10 @@ def _write_dump(directory: Path) -> None:
 
 
 class TestDrugCentralLoader:
-    """ChEMBL + UMLS->canonical mapping; off-label and unmapped rows are dropped."""
+    """ChEMBL + UMLS->canonical mapping; a pair becomes one edge; unmapped rows drop."""
 
     def test_build_frames(self, reference_dir: Path) -> None:
-        """Indication/contraindication map to DRG-DIS edges with harmonized ids."""
+        """A pair with three relations becomes one DRG-DIS edge with harmonized ids."""
         src = reference_dir / "drugcentral"
         _write_dump(src)
         reference = ReferenceData(reference_dir)
@@ -43,17 +43,47 @@ class TestDrugCentralLoader:
         )
         nodes, edges = loader.build_frames()
 
-        by_type = {r["type"]: r for r in edges.iter_rows(named=True)}
-        assert set(by_type) == {"INDICATION", "CONTRAINDICATION"}
-        assert by_type["INDICATION"]["from"] == "CHEMBL25"
-        assert by_type["INDICATION"]["to"] == "MONDO_0005148"
-        assert by_type["INDICATION"]["label"] == "DRG-DIS"
+        assert edges.height == 1
+        edge = edges.row(0, named=True)
+        assert edge["from"] == "CHEMBL25"
+        assert edge["to"] == "MONDO_0005148"
+        assert edge["label"] == "DRG-DIS"
+        assert edge["type"] == "INDICATION"
+        assert edge["asserted_relations"] == [
+            "CONTRAINDICATION",
+            "INDICATION",
+            "OFF_LABEL_USE",
+        ]
+        assert edge["relation_conflict"] is True
+        assert edge["sources"] == ["DRUG_CENTRAL"]
 
         drug = nodes.filter(nodes["curie"] == "CHEMBL25").row(0, named=True)
         assert drug["name"] == "aspirin"
         disease = nodes.filter(nodes["curie"] == "MONDO_0005148").row(0, named=True)
         assert disease["label"] == "Disease"
         assert disease["name"] == "type 2 diabetes"
+
+    def test_off_label_use_alone_is_kept(self, reference_dir: Path) -> None:
+        """An off-label-only pair keeps its relation and raises no conflict."""
+        src = reference_dir / "drugcentral"
+        _write_dump(src)
+        dump = src / "drugcentral_dump.sql.gz"
+        with gzip.open(dump, "rt", encoding="utf-8") as fh:
+            text = fh.read()
+        text = text.replace("1\tindication\tC0011860", "1\tx\tC0011860").replace(
+            "1\tcontraindication\tC0011860", "1\tx\tC0011860"
+        )
+        with gzip.open(dump, "wt", encoding="utf-8") as fh:
+            fh.write(text)
+        reference = ReferenceData(reference_dir)
+        loader = DrugCentralGraphLoader(
+            src, harmonizer=Harmonizer(reference), enricher=NodeEnricher(reference)
+        )
+        _, edges = loader.build_frames()
+
+        edge = edges.row(0, named=True)
+        assert edge["type"] == "OFF_LABEL_USE"
+        assert edge["relation_conflict"] is False
 
     def test_schema_covers_emitted_types(self, reference_dir: Path) -> None:
         """Emitted labels and relation types fall within the authored schema."""

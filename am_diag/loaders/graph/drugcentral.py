@@ -21,7 +21,14 @@ from am_diag.loaders.graph.base import GraphLoader
 from am_diag.loaders.graph.enricher import NodeEnricher
 from am_diag.loaders.graph.formats import read_pg_dump_table
 from am_diag.loaders.graph.harmonizer import Harmonizer
-from am_diag.loaders.graph.vocab import Node, Relation, label_for, structural_label
+from am_diag.loaders.graph.relations import collapse_relations
+from am_diag.loaders.graph.vocab import (
+    Node,
+    Relation,
+    Source,
+    label_for,
+    structural_label,
+)
 
 
 _DUMP = "drugcentral_dump.sql.gz"
@@ -29,6 +36,7 @@ _SOURCE = "DRUG_CENTRAL"
 _RELATION_MAP = {
     "indication": Relation.INDICATION.value,
     "contraindication": Relation.CONTRAINDICATION.value,
+    "off-label use": Relation.OFF_LABEL_USE.value,
 }
 
 
@@ -74,16 +82,19 @@ class DrugCentralGraphLoader(GraphLoader):
         mapped = self._mapped().with_columns(
             pl.col("id").str.starts_with("HP_").alias("is_phenotype")
         )
-        edges = mapped.select(
-            pl.col("chembl_id").alias("from"),
-            pl.col("id").alias("to"),
-            pl.col("relationship_name").replace_strict(_RELATION_MAP).alias("type"),
-            pl.when(pl.col("is_phenotype"))
-            .then(pl.lit(structural_label(Node.DRUG, Node.PHENOTYPE)))
-            .otherwise(pl.lit(structural_label(Node.DRUG, Node.DISEASE)))
-            .alias("label"),
-            pl.lit([_SOURCE]).alias("sources"),
-        ).unique(subset=["from", "to", "type"])
+        edges = collapse_relations(
+            mapped.select(
+                pl.col("chembl_id").alias("from"),
+                pl.col("id").alias("to"),
+                pl.col("relationship_name").replace_strict(_RELATION_MAP).alias("type"),
+                pl.when(pl.col("is_phenotype"))
+                .then(pl.lit(structural_label(Node.DRUG, Node.PHENOTYPE)))
+                .otherwise(pl.lit(structural_label(Node.DRUG, Node.DISEASE)))
+                .alias("label"),
+                pl.lit([_SOURCE]).alias("sources"),
+            ),
+            Source.DRUG_CENTRAL,
+        )
         drugs = self._enricher.enrich_drugs(
             mapped.select(pl.col("chembl_id").alias("curie"))
             .unique("curie")
