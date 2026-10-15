@@ -298,34 +298,6 @@ uv run am-diag qa --project clinical --datasets careqa,medqa --limit 10
 uv run am-diag jobs list
 ```
 
-#### Loading the OptimusKG release
-
-The `optimuskg` loader ingests the published [OptimusKG](https://github.com/mims-harvard/OptimusKG) graph directly, without chunking or extraction. First download `nodes.parquet` and `edges.parquet` from the Harvard Dataverse record (DOI `10.7910/DVN/IYNGEV`), or fetch them with the `optimuskg` client in a throwaway Python 3.12 environment, which prints their location:
-
-```bash
-uvx --python 3.12 --from optimuskg python -c "import optimuskg; print(optimuskg.get_file('nodes.parquet')); print(optimuskg.get_file('edges.parquet'))"
-```
-
-Then point the loader at the directory that holds both files. The loader needs no `--reference-dir`.
-
-```bash
-uv run am-diag ingest --graph med --source loader:optimuskg:<gold_dir> --finalize
-```
-
-The loader also reads the per-type layout (`nodes/` and `edges/` directories). In Python, pass `largest_connected_component=True` to `OptimusKGGraphLoader` to read the `largest_connected_component_*.parquet` files instead. Each edge keeps the relation OptimusKG selected as its `type`. When sources disagree, the edge also lists every relation any source asserted in `asserted_relations`, so a query can find drug-disease pairs where any source says `CONTRAINDICATION`:
-
-```cypher
-MATCH (d:Drug)-[r:RELATES_TO]->(x:Disease)
-WHERE 'CONTRAINDICATION' IN r.asserted_relations
-RETURN d.name, r.type, x.name
-```
-
-Ingesting a newer release onto a graph built from an older one leaves stale edges and properties behind. Use a new graph, or wipe the old one first, and then ingest again.
-
-#### Loading one OptimusKG dataset
-
-Each of OptimusKG's input datasets also has its own loader. Pass its name instead of `optimuskg`: `uberon`, `mondo`, `hpo`, `gene_ontology`, `reactome`, `opentargets`, `bgee`, `drugbank`, `disgenet`, `drugcentral`, `onsides`, `ctd` or `ppi`. Loaders for `opentargets`, `bgee`, `drugbank`, `disgenet`, `drugcentral`, `ctd` and `ppi` also need `--reference-dir`. These loaders write one edge for each pair of nodes, as the released graph does: the drug-gene edges of DrugBank and Open Targets, and the drug-disease and drug-phenotype edges of DrugCentral. The edge type is the highest-priority relation that the dataset asserts. `asserted_relations` lists every relation the dataset asserts for the pair, and `relation_conflict` is true when two of them contradict each other, such as `INDICATION` and `CONTRAINDICATION`. Other edges, such as the DrugBank drug-drug edges, do not have these properties. A single dataset sees only its own statements, so an edge from one dataset can have a different type than the same pair in the released graph, where all datasets are merged.
-
 ### Programmatic Usage
 
 ```python
